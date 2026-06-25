@@ -28,6 +28,11 @@ export interface BotHandler {
    * true の場合、この Bot がマッチしたら後続 Bot の評価を打ち切る。
    */
   stopOnMatch?: boolean;
+  /**
+   * 応答暴走対策。値 (秒) を設定すると、同一投稿者に対してこの間隔より
+   * 短い連続実行を BotManager が抑止する。0 または未設定なら無制限。
+   */
+  cooldownSec?: number;
 }
 
 export abstract class BaseBotFilter implements BotFilter {

@@ -5,7 +5,6 @@ import {
   actionFromFn,
   filterFromFn,
 } from "../../core/bot-handler.js";
-import { ReplyCooldown } from "../../shared/rate-limit.js";
 import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
 
 const KEYWORD_REPLIES: Array<{ pattern: RegExp; reply: string }> = [
@@ -27,8 +26,6 @@ export interface IoTOptions {
  * 出自: NostrIot index.js（キーワード反応 + 照明制御）。
  */
 export function createIoTBot(options: IoTOptions): BotHandler {
-  const cooldown = new ReplyCooldown(5);
-
   const filter = filterFromFn((event: Event, ctx: BotContext) => {
     if (event.pubkey === ctx.client.getPublicKey()) return false;
     if (KEYWORD_REPLIES.some(({ pattern }) => pattern.test(event.content))) return true;
@@ -44,7 +41,6 @@ export function createIoTBot(options: IoTOptions): BotHandler {
       return;
     }
 
-    if (!cooldown.isSafe(event.pubkey)) return;
     const match = KEYWORD_REPLIES.find(({ pattern }) => pattern.test(event.content));
     if (match) {
       await ctx.client.publishText(match.reply, { replyTo: event });

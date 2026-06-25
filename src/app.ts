@@ -9,6 +9,7 @@ import { SwitchBotClient } from "./integrations/switchbot/index.js";
 import { createFlowmeterJob } from "./jobs/flowmeter/index.js";
 import { createMetadataRefreshJob } from "./jobs/metadata-refresh/index.js";
 import { createPassportJob } from "./jobs/passport/index.js";
+import type { BotHandler } from "./core/bot-handler.js";
 import { BotManager } from "./core/bot-manager.js";
 import { EventBus } from "./core/event-bus.js";
 import { JobRunner } from "./core/job-runner.js";
@@ -45,22 +46,33 @@ async function main(): Promise<void> {
 }
 
 function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>): void {
+  const cooldown = config.cooldownSec;
+
+  // 管理コマンドは管理者操作なので抑止しない
   manager.register(createManagementBot(manager));
-  manager.register(createSalmonBot());
+
+  // 応答系 Bot は暴走対策として投稿者ごとにクールダウンを強制する
+  manager.register(withCooldown(createSalmonBot(), cooldown));
   manager.register(
-    createFlowmeterCommandBot({
-      relays: config.relayUrls,
-      enabled: config.flowmeter.enabled,
-    }),
+    withCooldown(
+      createFlowmeterCommandBot({
+        relays: config.relayUrls,
+        enabled: config.flowmeter.enabled,
+      }),
+      cooldown,
+    ),
+  );
+  manager.register(
+    withCooldown(
+      createCalendarBot({
+        apiKey: config.calendar.apiKey,
+        model: config.calendar.model,
+      }),
+      cooldown,
+    ),
   );
 
-  manager.register(
-    createCalendarBot({
-      apiKey: config.calendar.apiKey,
-      model: config.calendar.model,
-    }),
-  );
-
+  // MonitorBot は Nostr へ応答せず Discord 通知のため抑止対象外
   manager.register(
     createMonitorBot({
       webhookUrl: config.monitor.webhookUrl,
@@ -80,7 +92,12 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
           testMode: config.testMode,
         })
       : null;
-  manager.register(createIoTBot({ switchBot }));
+  manager.register(withCooldown(createIoTBot({ switchBot }), cooldown));
+}
+
+function withCooldown(handler: BotHandler, cooldownSec: number): BotHandler {
+  handler.cooldownSec = cooldownSec;
+  return handler;
 }
 
 function registerJobs(

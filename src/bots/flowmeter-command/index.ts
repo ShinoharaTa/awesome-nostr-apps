@@ -11,7 +11,6 @@ import {
   actionFromFn,
 } from "../../core/bot-handler.js";
 import { logger } from "../../core/logger.js";
-import { ReplyCooldown } from "../../shared/rate-limit.js";
 import { countPosts } from "../../jobs/flowmeter/measure.js";
 
 const ANALYZE_KINDS = [1, 6, 42];
@@ -27,8 +26,6 @@ export interface FlowmeterCommandOptions {
  * 出自: nostr-flowmeter-batch の subscribe ハンドラ（定期処理から分離）。
  */
 export function createFlowmeterCommandBot(options: FlowmeterCommandOptions): BotHandler {
-  const cooldown = new ReplyCooldown(5);
-
   const action = actionFromFn(async (event: Event, ctx: BotContext) => {
     if (/^流速ちゃん？/.test(event.content)) {
       await ctx.client.publishText("呼びましたか？", { replyTo: event });
@@ -36,7 +33,6 @@ export function createFlowmeterCommandBot(options: FlowmeterCommandOptions): Bot
     }
 
     // 自分宛の「さわぎすぎ」系リプライには投稿数分析で返す
-    if (!cooldown.isSafe(event.pubkey)) return;
     await analysePosts(event, ctx, options.relays);
   });
 

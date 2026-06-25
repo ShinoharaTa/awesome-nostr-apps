@@ -16,6 +16,13 @@ function bool(name: string, fallback = false): boolean {
   return value.toLowerCase() === "true";
 }
 
+function num(name: string, fallback: number): number {
+  const value = str(name);
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function list(name: string): string[] {
   const value = str(name);
   if (!value) return [];
@@ -35,6 +42,8 @@ export interface AppConfig {
   logLevel: string;
   relays: RelayInfo[];
   relayUrls: string[];
+  /** 応答系 Bot のクールダウン秒（暴走対策） */
+  cooldownSec: number;
 
   calendar: {
     apiKey?: string;
@@ -101,6 +110,7 @@ export function loadConfig(): AppConfig {
     logLevel: str("LOG_LEVEL") ?? "info",
     relays,
     relayUrls: relayUrls(relays),
+    cooldownSec: num("COOLDOWN_SEC", 20),
 
     calendar: {
       apiKey: str("OPENROUTER_API_KEY") ?? str("OPENAI_API_KEY"),
