@@ -1,0 +1,11 @@
+---
+description: Project direction for consolidating Nostr-related bots
+alwaysApply: true
+---
+
+# Project Direction
+
+- Do not include EEW delivery in this project. Treat EEW as a separate system.
+- The top-level directories such as `awesome-bot`, `OnlineConcierge`, `NostrIot`, `nostr-flowmeter-batch`, and `nostr-metadata-enhancer` are symbolic links to existing repositories. Use them as references only.
+- Build the new consolidated bot project from scratch in this workspace, not by editing the linked repositories unless explicitly requested.
+- The intended scope is to consolidate non-EEW Nostr-related bots, scheduled jobs, and external integrations into a new project structure.

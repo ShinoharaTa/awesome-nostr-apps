@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.log
+log/
+.env
+.env.local
+.DS_Store
+config.json
+
+# 既存リポジトリへのシンボリックリンク (参照専用・このプロジェクトには含めない)
+/awesome-bot
+/NostrIot
+/OnlineConcierge
+/nostr-flowmeter-batch
+/nostr-metadata-enhancer
