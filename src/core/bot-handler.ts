@@ -95,9 +95,7 @@ export function filterFromFn(fn: (event: Event, ctx: BotContext) => boolean): Bo
 /**
  * 関数からアクションを手早く作るためのヘルパ。
  */
-export function actionFromFn(
-  fn: (event: Event, ctx: BotContext) => Promise<void>,
-): BotAction {
+export function actionFromFn(fn: (event: Event, ctx: BotContext) => Promise<void>): BotAction {
   return { execute: fn };
 }
 

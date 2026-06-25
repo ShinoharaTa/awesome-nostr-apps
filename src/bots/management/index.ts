@@ -32,20 +32,18 @@ export function createManagementBot(manager: BotManager): BotHandler {
     if (command.startsWith("!enable ")) {
       const name = command.slice("!enable ".length).trim();
       const ok = manager.setEnabled(name, true);
-      await ctx.client.publishText(
-        ok ? `${name}を有効にしました` : `${name}が見つかりません`,
-        { replyTo: event },
-      );
+      await ctx.client.publishText(ok ? `${name}を有効にしました` : `${name}が見つかりません`, {
+        replyTo: event,
+      });
       return;
     }
 
     if (command.startsWith("!disable ")) {
       const name = command.slice("!disable ".length).trim();
       const ok = manager.setEnabled(name, false);
-      await ctx.client.publishText(
-        ok ? `${name}を無効にしました` : `${name}が見つかりません`,
-        { replyTo: event },
-      );
+      await ctx.client.publishText(ok ? `${name}を無効にしました` : `${name}が見つかりません`, {
+        replyTo: event,
+      });
     }
   });
 

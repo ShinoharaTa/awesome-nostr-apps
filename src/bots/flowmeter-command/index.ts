@@ -54,7 +54,9 @@ export function createFlowmeterCommandBot(options: FlowmeterCommandOptions): Bot
 async function analysePosts(event: Event, ctx: BotContext, relays: string[]): Promise<void> {
   const now = fromUnixTime(event.created_at);
   try {
-    const yesterday = await countPosts(relays, ANALYZE_KINDS, subDays(now, 1), 1440, [event.pubkey]);
+    const yesterday = await countPosts(relays, ANALYZE_KINDS, subDays(now, 1), 1440, [
+      event.pubkey,
+    ]);
     const today = await countPosts(relays, ANALYZE_KINDS, now, 1440, [event.pubkey]);
 
     let text = `直近24時間は ${today} 投稿です。\nその前は ${yesterday} 投稿でした。\n`;

@@ -1,4 +1,4 @@
-import { RegexFilter, TextReplyAction, type BotHandler } from "../../core/bot-handler.js";
+import { type BotHandler, RegexFilter, TextReplyAction } from "../../core/bot-handler.js";
 
 /**
  * 「サモン！」で始まる投稿に「サーモン！」と返す最小 Bot。

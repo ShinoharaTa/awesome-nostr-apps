@@ -35,14 +35,11 @@ export function createFlowmeterJob(options: FlowmeterJobOptions): Job {
     enabled: options.enabled,
     async run() {
       const now = new Date();
-      const counts = await countByKind(
-        options.relays.map((relay) => relay.url),
-        now,
-        span,
-      );
+      const relayUrls = options.relays.map((relay) => relay.url);
+      const counts = await countByKind(relayUrls, now, span);
 
-      await postSummary(options.client, options.relays, counts, span);
-      await updateCharts(options.client, options.relays, counts, now);
+      await postSummary(options.client, options.relays, relayUrls, counts, span);
+      await updateCharts(options.client, options.relays, relayUrls, counts, now);
     },
   };
 }
@@ -50,6 +47,7 @@ export function createFlowmeterJob(options: FlowmeterJobOptions): Job {
 async function postSummary(
   client: NostrClient,
   relays: RelayInfo[],
+  relayUrls: string[],
   counts: CountByRelay,
   span: number,
 ): Promise<void> {
@@ -60,12 +58,18 @@ async function postSummary(
   let text = "■ 流速計測\n";
   text += `  ${format(from, "yyyy/MM/dd")} ${format(from, "HH:mm")}～${format(to, "HH:mm")}\n\n`;
   text += "[JP リレー]\n";
-  text += relaySection(relays.filter((r) => r.target === "jp"), counts);
+  text += relaySection(
+    relays.filter((r) => r.target === "jp"),
+    counts,
+  );
   text += "\n[GLOBAL リレー]\n";
-  text += relaySection(relays.filter((r) => r.target === "all"), counts);
+  text += relaySection(
+    relays.filter((r) => r.target === "all"),
+    counts,
+  );
   text += `\n■ 野洲田川定点観測所\n  ${SITE_URL}\n`;
 
-  await client.publishText(text);
+  await client.publishText(text, { relays: relayUrls });
 }
 
 function relaySection(relays: RelayInfo[], counts: CountByRelay): string {
@@ -84,6 +88,7 @@ function relaySection(relays: RelayInfo[], counts: CountByRelay): string {
 async function updateCharts(
   client: NostrClient,
   relays: RelayInfo[],
+  relayUrls: string[],
   counts: CountByRelay,
   now: Date,
 ): Promise<void> {
@@ -93,20 +98,28 @@ async function updateCharts(
     postsByRelay[relay.url] = counts[relay.url]?.posts ?? 0;
   }
 
-  await updateChart(client, "nostr_river_flowmeter", relays, time, postsByRelay);
+  await updateChart(client, "nostr_river_flowmeter", relays, relayUrls, time, postsByRelay);
   const dateKey = format(startOfMinute(now), "yyyyMMdd");
-  await updateChart(client, `nostr_river_flowmeter_${dateKey}`, relays, time, postsByRelay);
+  await updateChart(
+    client,
+    `nostr_river_flowmeter_${dateKey}`,
+    relays,
+    relayUrls,
+    time,
+    postsByRelay,
+  );
 }
 
 async function updateChart(
   client: NostrClient,
   tableName: string,
   relays: RelayInfo[],
+  relayUrls: string[],
   time: number,
   postsByRelay: Record<string, number>,
 ): Promise<void> {
   try {
-    const raw = await client.nip78Get(tableName);
+    const raw = await client.nip78Get(tableName, relayUrls);
     const chart: ChartData = raw ? (JSON.parse(raw) as ChartData) : { axis: [], datas: {} };
 
     for (const relay of relays) {
@@ -115,7 +128,7 @@ async function updateChart(
     }
     chart.axis = appendWithLimit(chart.axis, time, CHART_LIMIT);
 
-    await client.nip78Post(tableName, JSON.stringify(chart));
+    await client.nip78Post(tableName, JSON.stringify(chart), relayUrls);
   } catch (error) {
     logger.error(`Flowmeter chart update failed: ${tableName}`, { error: String(error) });
   }

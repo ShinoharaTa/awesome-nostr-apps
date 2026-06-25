@@ -5,7 +5,9 @@ log/
 .env
 .env.local
 .DS_Store
-config.json
+
+# config.json は Git 管理（機密は含めない）。ローカル上書きのみ無視する
+config.local.json
 
 # 既存リポジトリへのシンボリックリンク (参照専用・このプロジェクトには含めない)
 /awesome-bot

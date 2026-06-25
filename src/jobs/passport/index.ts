@@ -6,10 +6,13 @@ import { toSecretKeyBytes } from "../../shared/keys.js";
 
 export interface PassportOptions {
   client: NostrClient;
-  /** パスポート送信用の秘密鍵 (nsec or hex) */
-  hex?: string;
+  /** パスポート送信用の秘密鍵 (nsec or hex)。.env 由来 */
+  key?: string;
   targetNpub?: string;
   schedule: string;
+  /** 投稿先リレー */
+  relays: string[];
+  enabled: boolean;
 }
 
 /**
@@ -17,15 +20,15 @@ export interface PassportOptions {
  * 出自: OnlineConcierge PassportBot（スケジュール専用アクション）。
  */
 export function createPassportJob(options: PassportOptions): Job {
-  const enabled = Boolean(options.hex);
+  const enabled = options.enabled && Boolean(options.key);
 
   return {
     name: "PassportJob",
     schedule: options.schedule,
     enabled,
     async run() {
-      if (!options.hex) return;
-      const privateKey = Buffer.from(toSecretKeyBytes(options.hex)).toString("hex");
+      if (!options.key) return;
+      const privateKey = Buffer.from(toSecretKeyBytes(options.key)).toString("hex");
 
       const today = format(new Date(), "yyyy/MM/dd");
       let content = `本日のパスポートを発行します (${today})`;
@@ -34,7 +37,7 @@ export function createPassportJob(options: PassportOptions): Job {
         if (tag) content += `\nnostr:${options.targetNpub}`;
       }
 
-      await options.client.publishText(content, { privateKey });
+      await options.client.publishText(content, { privateKey, relays: options.relays });
     },
   };
 }

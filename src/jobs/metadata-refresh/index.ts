@@ -2,8 +2,8 @@ import { finalizeEvent, getPublicKey } from "nostr-tools";
 import { SimplePool } from "nostr-tools/pool";
 import type { Job } from "../../core/job-runner.js";
 import { logger } from "../../core/logger.js";
-import { currUnixtime } from "../../shared/time.js";
 import { toSecretKeyBytes } from "../../shared/keys.js";
+import { currUnixtime } from "../../shared/time.js";
 
 export interface MetadataRefreshOptions {
   /** 再 Publish したいアカウントの秘密鍵 (nsec or hex) */
