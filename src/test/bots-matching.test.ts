@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createIoTBot } from "../bots/iot/index.js";
 import { createMonitorBot } from "../bots/monitor/index.js";
-import type { BotContext } from "../core/bot-handler.js";
-import type { NostrClient } from "../core/nostr-client.js";
+import type { BotClient, BotContext } from "../core/bot-handler.js";
 import { MockNostrClient, createMockEvent } from "./helpers/mock-client.js";
 
 function ctxOf(client: MockNostrClient): BotContext {
-  return { client: client as unknown as NostrClient };
+  return { client: client as unknown as BotClient };
 }
 
 describe("IoTBot", () => {

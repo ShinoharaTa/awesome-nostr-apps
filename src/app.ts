@@ -8,6 +8,7 @@ import { loadConfig } from "./config/env.js";
 import type { BotHandler } from "./core/bot-handler.js";
 import { BotManager } from "./core/bot-manager.js";
 import { EventBus } from "./core/event-bus.js";
+import { createIdentity } from "./core/identity.js";
 import { JobRunner } from "./core/job-runner.js";
 import { configureLogger, logger } from "./core/logger.js";
 import { NostrClient } from "./core/nostr-client.js";
@@ -25,7 +26,6 @@ async function main(): Promise<void> {
   }
 
   const client = new NostrClient({
-    hex: config.hex,
     relays: config.relays.publish,
     testMode: config.testMode,
   });
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   bus.start();
   jobRunner.start();
 
-  logger.info(`All systems started as ${client.getNpub()}`);
+  logger.info("All systems started");
 
   setupShutdown(bus, jobRunner, client);
 }
@@ -49,18 +49,28 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
   const cooldown = config.cooldownSec;
 
   // 管理コマンドは管理者操作なので抑止しない
-  manager.register(configure(createManagementBot(manager), config.management.enabled));
+  manager.register(
+    configure(createManagementBot(manager), {
+      enabled: config.management.enabled,
+      key: config.management.key,
+    }),
+  );
 
   // 応答系 Bot は暴走対策として投稿者ごとにクールダウンを強制する
-  manager.register(configure(createSalmonBot(), config.salmon.enabled, cooldown));
+  manager.register(
+    configure(createSalmonBot(), {
+      enabled: config.salmon.enabled,
+      cooldownSec: cooldown,
+      key: config.salmon.key,
+    }),
+  );
   manager.register(
     configure(
       createFlowmeterCommandBot({
         relays: config.flowmeter.relays.map((relay) => relay.url),
         enabled: config.flowmeter.enabled,
       }),
-      config.flowmeter.enabled,
-      cooldown,
+      { enabled: config.flowmeter.enabled, cooldownSec: cooldown, key: config.flowmeter.key },
     ),
   );
   manager.register(
@@ -69,8 +79,7 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
         apiKey: config.calendar.apiKey,
         model: config.calendar.model,
       }),
-      config.calendar.enabled,
-      cooldown,
+      { enabled: config.calendar.enabled, cooldownSec: cooldown, key: config.calendar.key },
     ),
   );
 
@@ -84,7 +93,7 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
         mentionNpubs: config.monitor.mentionNpubs,
         testMode: config.testMode,
       }),
-      config.monitor.enabled,
+      { enabled: config.monitor.enabled, key: config.monitor.key },
     ),
   );
 
@@ -97,12 +106,26 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
           testMode: config.testMode,
         })
       : null;
-  manager.register(configure(createIoTBot({ switchBot }), config.iot.enabled, cooldown));
+  manager.register(
+    configure(createIoTBot({ switchBot }), {
+      enabled: config.iot.enabled,
+      cooldownSec: cooldown,
+      key: config.iot.key,
+    }),
+  );
 }
 
-function configure(handler: BotHandler, enabled: boolean, cooldownSec?: number): BotHandler {
-  handler.enabled = enabled;
-  if (cooldownSec && cooldownSec > 0) handler.cooldownSec = cooldownSec;
+interface BotSetup {
+  enabled: boolean;
+  cooldownSec?: number;
+  /** 機能ごとの上書き鍵 (hex)。未設定ならメイン鍵で動く。 */
+  key?: string;
+}
+
+function configure(handler: BotHandler, setup: BotSetup): BotHandler {
+  handler.enabled = setup.enabled;
+  if (setup.cooldownSec && setup.cooldownSec > 0) handler.cooldownSec = setup.cooldownSec;
+  if (setup.key) handler.identity = createIdentity(setup.key);
   return handler;
 }
 
@@ -117,6 +140,7 @@ function registerJobs(
       relays: config.flowmeter.relays,
       schedule: config.flowmeter.cron,
       enabled: config.flowmeter.enabled,
+      key: config.flowmeter.key,
     }),
   );
 

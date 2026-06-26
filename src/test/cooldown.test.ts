@@ -1,9 +1,14 @@
+import { generateSecretKey } from "nostr-tools";
+import { bytesToHex } from "nostr-tools/utils";
 import { describe, expect, it } from "vitest";
 import type { BotHandler } from "../core/bot-handler.js";
 import { BotManager } from "../core/bot-manager.js";
 import type { EventBus } from "../core/event-bus.js";
+import { createIdentity } from "../core/identity.js";
 import type { NostrClient } from "../core/nostr-client.js";
 import { MockNostrClient, createMockEvent } from "./helpers/mock-client.js";
+
+const identity = createIdentity(bytesToHex(generateSecretKey()));
 
 function buildManager(client: MockNostrClient): BotManager {
   const fakeBus = { subscribe: () => {} } as unknown as EventBus;
@@ -21,6 +26,7 @@ function echoBot(cooldownSec: number): BotHandler {
     },
     enabled: true,
     cooldownSec,
+    identity,
   };
 }
 

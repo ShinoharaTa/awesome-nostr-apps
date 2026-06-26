@@ -1,8 +1,22 @@
 import type { Event } from "nostr-tools";
-import type { NostrClient } from "./nostr-client.js";
+import type { Identity } from "./identity.js";
+import type { PublishOptions } from "./nostr-client.js";
+
+/**
+ * Bot から見た Nostr クライアント。Bot ごとに異なる Identity を割り当てられるよう、
+ * NostrClient 全体ではなく投稿・自己判定に必要な操作だけを公開する。
+ * NostrClient（メイン鍵）と IdentityClient（機能ごとの鍵）の双方がこれを満たす。
+ */
+export interface BotClient {
+  getPublicKey(): string;
+  getNpub(): string;
+  isReplyToMe(event: Event): boolean;
+  publishText(content: string, options?: PublishOptions): Promise<string | null>;
+  getProfile(pubkey: string, relays?: string[]): Promise<Record<string, unknown> | null>;
+}
 
 export interface BotContext {
-  client: NostrClient;
+  client: BotClient;
 }
 
 export interface BotFilter {
@@ -33,6 +47,11 @@ export interface BotHandler {
    * 短い連続実行を BotManager が抑止する。0 または未設定なら無制限。
    */
   cooldownSec?: number;
+  /**
+   * この Bot 専用の投稿主体。未設定ならメイン鍵（既定 Identity）で動く。
+   * 設定すると別アカウントとして投稿・自己判定する。
+   */
+  identity?: Identity;
 }
 
 export abstract class BaseBotFilter implements BotFilter {

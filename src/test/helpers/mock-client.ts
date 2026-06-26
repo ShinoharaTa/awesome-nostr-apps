@@ -35,6 +35,10 @@ export class MockNostrClient {
     return "mock-event-id";
   }
 
+  async getProfile(): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
   clear(): void {
     this.sent.length = 0;
   }

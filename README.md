@@ -44,9 +44,23 @@ npm start
 
 設定は「秘密情報」と「非機密設定」を分けて管理します。
 
-- **秘密情報 → `.env`**: 秘密鍵（`HEX` / `PASSPORT_KEY` / `METADATA_KEYS`）、API キー、
-  Discord Webhook、SwitchBot トークン等。`.env` には他に `APP_ENV` のみを置きます。
+- **秘密情報 → `.env`**: 秘密鍵、API キー、Discord Webhook、SwitchBot トークン等。
+  `.env` には他に `APP_ENV` のみを置きます。
 - **非機密設定 → JSON（`config.json`）**: リレー一覧、機能の有効/無効、cron、キーワード等。
+
+### 鍵（アカウント）の指定
+
+鍵はすべて `.env` に置き、`nsec1...` でも 64 文字 hex でも指定できます。
+**鍵は「機能ごと」に持ちます。「既定鍵 / メインアカウント」という概念はありません。**
+
+- `<機能>_NSEC`: その機能（Bot/Job）が**どのアカウントとして投稿するか**を表す鍵。
+  `config.json` で有効にした機能は、対応する `<機能>_NSEC` が**必須**です。
+  例: `SALMON_NSEC` / `MANAGEMENT_NSEC` / `CALENDAR_NSEC` / `IOT_NSEC` / `MONITOR_NSEC` /
+  `FLOWMETER_NSEC`（command と job 共通）/ `PASSPORT_NSEC`。
+- **共通アカウントにしたい場合**は、各 `<機能>_NSEC` に**同じ鍵**を入れます。
+  **機能ごとに分けたい場合**は、それぞれ別の鍵を入れます。
+- `METADATA_KEYS`: これだけ性質が異なります。MetadataRefreshJob が kind:0 を再 Publish する
+  **対象アカウント自身の秘密鍵リスト**で、Bot の投稿鍵ではありません。
 
 ### 読み込むファイルの切り替え（APP_ENV）
 

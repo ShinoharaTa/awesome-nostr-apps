@@ -1,22 +1,16 @@
-import {
-  type Event,
-  type EventTemplate,
-  type Filter,
-  finalizeEvent,
-  getPublicKey,
-  nip19,
-} from "nostr-tools";
+import { type Event, type EventTemplate, type Filter, finalizeEvent } from "nostr-tools";
 import { SimplePool, useWebSocketImplementation } from "nostr-tools/pool";
 import WebSocket from "ws";
 import { firstMentionedPubkey, replyTags } from "../shared/nostr-tags.js";
 import { currUnixtime } from "../shared/time.js";
+import type { BotClient } from "./bot-handler.js";
+import type { Identity } from "./identity.js";
 import { logger } from "./logger.js";
 
 useWebSocketImplementation(WebSocket);
 
 export interface NostrClientConfig {
-  hex: string;
-  /** 既定の投稿先リレー（応答系 Bot が使用）。Job 等は publish 時に個別指定可。 */
+  /** 既定の投稿先リレー。publish 時に relays を渡せば機能ごとに上書きできる。 */
   relays: string[];
   testMode: boolean;
 }
@@ -24,7 +18,7 @@ export interface NostrClientConfig {
 export interface PublishOptions {
   /** 返信先イベント。指定すると e/p タグを付ける */
   replyTo?: Event | null;
-  /** 投稿に使う秘密鍵 (未指定ならメイン鍵) */
+  /** 投稿に使う秘密鍵 (hex)。NostrClient 単体では必須。IdentityClient が自動付与する。 */
   privateKey?: string;
   /** 追加タグ */
   tags?: string[][];
@@ -33,7 +27,8 @@ export interface PublishOptions {
 }
 
 /**
- * Nostr の送受信を一手に引き受ける共通クライアント。
+ * Nostr のリレー接続・送受信を担う「トランスポート」。鍵（アカウント）は持たず、
+ * 署名鍵は呼び出し側 (Bot は IdentityClient、Job は明示) が必ず渡す。
  * 購読は EventBus 側で 1 本化するため、ここでは購読の低レベル API のみ提供する。
  *
  * 切断対策として SimplePool の自動再接続 (enableReconnect) と keepalive ping
@@ -42,14 +37,10 @@ export interface PublishOptions {
  */
 export class NostrClient {
   private readonly pool: SimplePool;
-  private readonly secretKey: Uint8Array;
-  private readonly pubkeyHex: string;
   /** これまで接続したリレーURL（shutdown 時にまとめて閉じる） */
   private readonly usedRelays = new Set<string>();
 
   constructor(private readonly config: NostrClientConfig) {
-    this.secretKey = hexToBytes(config.hex);
-    this.pubkeyHex = getPublicKey(this.secretKey);
     for (const url of config.relays) this.usedRelays.add(url);
     this.pool = new SimplePool({ enableReconnect: true, enablePing: true });
     this.pool.onRelayConnectionFailure = (url: string) => {
@@ -78,20 +69,8 @@ export class NostrClient {
     return this.pool.listConnectionStatus();
   }
 
-  getPublicKey(): string {
-    return this.pubkeyHex;
-  }
-
-  getNpub(): string {
-    return nip19.npubEncode(this.pubkeyHex);
-  }
-
-  isReplyToMe(event: Event): boolean {
-    return firstMentionedPubkey(event) === this.pubkeyHex;
-  }
-
   /**
-   * テキスト (kind:1) を投稿する。TEST_MODE ではログ出力のみ。
+   * テキスト (kind:1) を投稿する。privateKey は必須。TEST_MODE ではログ出力のみ。
    */
   async publishText(content: string, options: PublishOptions = {}): Promise<string | null> {
     const created = options.replyTo ? options.replyTo.created_at + 1 : currUnixtime();
@@ -111,15 +90,17 @@ export class NostrClient {
   }
 
   /**
-   * 任意の EventTemplate を署名して送信する。relays 未指定なら既定の publish リレー。
+   * 任意の EventTemplate を署名して送信する。privateKey 必須、relays 未指定なら既定。
    */
   async publishEvent(
     template: EventTemplate,
     privateKey?: string,
     relays?: string[],
   ): Promise<string | null> {
-    const key = privateKey ? hexToBytes(privateKey) : this.secretKey;
-    const signed = finalizeEvent(template, key);
+    if (!privateKey) {
+      throw new Error("publishEvent requires a privateKey (no default account key exists).");
+    }
+    const signed = finalizeEvent(template, hexToBytes(privateKey));
 
     if (this.config.testMode) {
       logger.info("[TEST_MODE] publish skipped", {
@@ -169,21 +150,26 @@ export class NostrClient {
   }
 
   /**
-   * NIP-78 (kind:30078) の保存値を取得する。
+   * NIP-78 (kind:30078) の保存値を、指定アカウント (author) について取得する。
    */
-  async nip78Get(dTag: string, relays?: string[]): Promise<string | undefined> {
+  async nip78Get(dTag: string, author: string, relays?: string[]): Promise<string | undefined> {
     const event = await this.pool.get(this.useRelays(relays), {
       kinds: [30078],
       "#d": [dTag],
-      authors: [this.pubkeyHex],
+      authors: [author],
     });
     return event?.content;
   }
 
   /**
-   * NIP-78 (kind:30078) に値を保存する。
+   * NIP-78 (kind:30078) に値を保存する。privateKey 必須。
    */
-  async nip78Post(dTag: string, content: string, relays?: string[]): Promise<string | null> {
+  async nip78Post(
+    dTag: string,
+    content: string,
+    privateKey: string,
+    relays?: string[],
+  ): Promise<string | null> {
     return this.publishEvent(
       {
         kind: 30078,
@@ -191,7 +177,7 @@ export class NostrClient {
         tags: [["d", dTag]],
         created_at: currUnixtime(),
       },
-      undefined,
+      privateKey,
       relays,
     );
   }
@@ -203,4 +189,38 @@ export class NostrClient {
 
 function hexToBytes(hex: string): Uint8Array {
   return new Uint8Array(Buffer.from(hex, "hex"));
+}
+
+/**
+ * メインの NostrClient(=リレー接続/送信) を共有しつつ、別の Identity として
+ * 振る舞う薄いラッパ。投稿は自分の鍵で署名し、自己判定も自分の pubkey で行う。
+ */
+export class IdentityClient implements BotClient {
+  constructor(
+    private readonly base: NostrClient,
+    private readonly identity: Identity,
+  ) {}
+
+  getPublicKey(): string {
+    return this.identity.pubkey;
+  }
+
+  getNpub(): string {
+    return this.identity.npub;
+  }
+
+  isReplyToMe(event: Event): boolean {
+    return firstMentionedPubkey(event) === this.identity.pubkey;
+  }
+
+  publishText(content: string, options: PublishOptions = {}): Promise<string | null> {
+    return this.base.publishText(content, {
+      ...options,
+      privateKey: options.privateKey ?? this.identity.hex,
+    });
+  }
+
+  getProfile(pubkey: string, relays?: string[]): Promise<Record<string, unknown> | null> {
+    return this.base.getProfile(pubkey, relays);
+  }
 }

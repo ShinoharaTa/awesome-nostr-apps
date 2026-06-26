@@ -17,3 +17,10 @@ export function toSecretKeyBytes(key: string): Uint8Array {
   }
   return new Uint8Array(Buffer.from(trimmed, "hex"));
 }
+
+/**
+ * nsec1... または hex を 64 文字 hex 文字列に正規化する。
+ */
+export function toHexKey(key: string): string {
+  return Buffer.from(toSecretKeyBytes(key)).toString("hex");
+}

@@ -2,8 +2,9 @@ import type { Event } from "nostr-tools";
 import { ReplyCooldown } from "../shared/rate-limit.js";
 import type { BotContext, BotHandler } from "./bot-handler.js";
 import type { EventBus } from "./event-bus.js";
+import type { Identity } from "./identity.js";
 import { logger } from "./logger.js";
-import type { NostrClient } from "./nostr-client.js";
+import { IdentityClient, type NostrClient } from "./nostr-client.js";
 
 /**
  * Bot を登録し、EventBus 経由のイベントを各 Bot に振り分ける。
@@ -12,20 +13,34 @@ import type { NostrClient } from "./nostr-client.js";
  */
 export class BotManager {
   private handlers: BotHandler[] = [];
-  private readonly ctx: BotContext;
+  private readonly ctxCache = new Map<string, BotContext>();
   private readonly cooldowns = new Map<string, ReplyCooldown>();
 
   constructor(
-    client: NostrClient,
+    private readonly client: NostrClient,
     private readonly bus: EventBus,
-  ) {
-    this.ctx = { client };
+  ) {}
+
+  /**
+   * Bot 固有の Identity（鍵）にバインドしたコンテキストを返す（Bot ごとにキャッシュ）。
+   * すべての Bot は自分の鍵を持つ前提（既定鍵 / メインアカウントは存在しない）。
+   */
+  private contextFor(identity: Identity, name: string): BotContext {
+    let ctx = this.ctxCache.get(name);
+    if (!ctx) {
+      ctx = { client: new IdentityClient(this.client, identity) };
+      this.ctxCache.set(name, ctx);
+    }
+    return ctx;
   }
 
   register(handler: BotHandler): void {
     this.handlers.push(handler);
     this.handlers.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-    logger.info(`Bot registered: ${handler.name}`, { enabled: handler.enabled });
+    logger.info(`Bot registered: ${handler.name}`, {
+      enabled: handler.enabled,
+      npub: handler.identity?.npub,
+    });
   }
 
   unregister(name: string): void {
@@ -52,8 +67,15 @@ export class BotManager {
   async handleEvent(event: Event): Promise<void> {
     for (const handler of this.handlers) {
       if (!handler.enabled) continue;
+      if (!handler.identity) {
+        logger.warn(
+          `Bot "${handler.name}" enabled without a key; skipping. Set its <feature>_NSEC.`,
+        );
+        continue;
+      }
       try {
-        if (!handler.filter.matches(event, this.ctx)) continue;
+        const ctx = this.contextFor(handler.identity, handler.name);
+        if (!handler.filter.matches(event, ctx)) continue;
 
         if (this.isCoolingDown(handler, event.pubkey)) {
           logger.debug(`Cooldown active: ${handler.name}`, { pubkey: event.pubkey });
@@ -61,7 +83,7 @@ export class BotManager {
         }
 
         logger.debug(`Event matched: ${handler.name}`, { eventId: event.id });
-        await handler.action.execute(event, this.ctx);
+        await handler.action.execute(event, ctx);
         if (handler.stopOnMatch) break;
       } catch (error) {
         logger.error(`Bot error: ${handler.name}`, { error: String(error) });
