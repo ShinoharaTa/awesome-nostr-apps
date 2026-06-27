@@ -2,16 +2,17 @@ import type { Event } from "nostr-tools";
 import {
   type BotContext,
   type BotHandler,
+  RegexFilter,
+  TextReplyAction,
   actionFromFn,
   filterFromFn,
 } from "../../core/bot-handler.js";
 import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
 import { createCalendarBot } from "../calendar/index.js";
 import { createIoTBot } from "./iot/index.js";
-import { createSalmonBot } from "./salmon/index.js";
 
 export interface ShinoemonSkills {
-  keywordReply: boolean;
+  callResponse: boolean;
   lightControl: boolean;
   calendar: boolean;
 }
@@ -19,6 +20,10 @@ export interface ShinoemonSkills {
 export interface ShinoemonOptions {
   skills: ShinoemonSkills;
   switchBot: SwitchBotClient | null;
+  home: {
+    lightDeviceNames: string[];
+    allowControl: boolean;
+  };
   calendar: {
     apiKey?: string;
     model: string;
@@ -28,7 +33,7 @@ export interface ShinoemonOptions {
 /**
  * しのえもん。
  *
- * 公開 Bot としては 1 体に見せ、内部ではキーワード応答・照明操作・予定作成などの
+ * 公開 Bot としては 1 体に見せ、内部では呼びかけ応答・照明操作・予定作成などの
  * skill を順番に評価する。将来的に LLM/Agent が skill を選ぶ形へ拡張しやすいよう、
  * ここをオーケストレーション層にする。
  */
@@ -66,20 +71,28 @@ function buildSkills(options: ShinoemonOptions): BotHandler[] {
     );
   }
 
-  if (options.skills.keywordReply) {
-    // 「サモン！」は明示スキルを優先し、IoT 側の「サモン」反応との二重応答を避ける。
-    skills.push(createSalmonBot());
+  if (options.skills.callResponse) {
+    skills.push(createCallResponseSkill());
   }
 
-  if (options.skills.keywordReply || options.skills.lightControl) {
+  if (options.skills.lightControl) {
     skills.push(
       createIoTBot({
         switchBot: options.switchBot,
-        keywordReplyEnabled: options.skills.keywordReply,
         lightControlEnabled: options.skills.lightControl,
+        home: options.home,
       }),
     );
   }
 
   return skills;
+}
+
+function createCallResponseSkill(): BotHandler {
+  return {
+    name: "ShinoemonCallResponseSkill",
+    filter: new RegexFilter(/^しのえもん[？?！!。.\s]*$/),
+    action: new TextReplyAction("呼びましたか？"),
+    enabled: true,
+  };
 }

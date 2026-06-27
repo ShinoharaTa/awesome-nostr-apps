@@ -25,9 +25,15 @@ export interface FileConfig {
     enabled?: boolean;
     model?: string;
     skills?: {
-      keywordReply?: boolean;
+      callResponse?: boolean;
       lightControl?: boolean;
       calendar?: boolean;
+    };
+    home?: {
+      /** 点灯状態確認・点灯操作に使うライト名。未指定ならライト系デバイスを自動選択。 */
+      lightDeviceNames?: string[];
+      /** 光あれ！ による実デバイス操作を許可するか。 */
+      allowControl?: boolean;
     };
   };
   monitor?: {

@@ -24,6 +24,10 @@ export interface SwitchBotConfig {
 export class SwitchBotClient {
   constructor(private readonly config: SwitchBotConfig) {}
 
+  get allowControl(): boolean {
+    return this.config.allowControl;
+  }
+
   private authHeaders(): Record<string, string> {
     const t = Date.now().toString();
     const nonce = crypto.randomUUID();

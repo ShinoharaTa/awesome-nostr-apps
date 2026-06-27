@@ -10,8 +10,8 @@ import type { FileConfig } from "./schema.js";
  * 「機能を有効化したら .env に何が必要か」の対応:
  *   shinoemon   : enabled=true なら SHINOEMON_NSEC 必須
  *   management  : enabled=true なら MANAGEMENT_NSEC 必須
- *   shinoemon.skills.calendar : OPENROUTER/OPENAI_API_KEY があれば予定解析の精度向上
- *   shinoemon.skills.lightControl : 実機操作するなら SWITCH_BOT_TOKEN/SECRET
+ *   shinoemon.skills.calendar : 有効化時、OPENROUTER/OPENAI_API_KEY があれば予定解析の精度向上
+ *   shinoemon.skills.lightControl : 有効化時、実機操作するなら SWITCH_BOT_TOKEN/SECRET
  *   monitor     : 投稿しない監視系。NSEC 不要。DISCORD_WEBHOOK_URL 必須
  *   flowmeterChan : enabled=true なら FLOWMETER_CHAN_NSEC 必須
  *   passport    : enabled=true なら PASSPORT_NSEC 必須
@@ -45,11 +45,17 @@ const config = {
   // --- しのえもん（キャラ/オーケストレーション Bot） ---
   shinoemon: {
     enabled: true, // 要 SHINOEMON_NSEC
-    model: "gpt-4", // 予定解析など、LLM が必要な skill のモデル
+    model: "gpt-4", // 将来の予定解析など、LLM が必要な skill のモデル
     skills: {
-      keywordReply: true, // サモン/サーモン/神様などの定型応答
-      lightControl: false, // SwitchBot 照明操作（要 SWITCH_BOT_TOKEN/SECRET）
-      calendar: true, // 「予定 ...」から Google カレンダー URL を生成
+      callResponse: true, // 「しのえもん」と呼ばれたら「呼びましたか？」と返す
+      lightControl: true, // まいへや/光ある？/光あれ！（要 SWITCH_BOT_TOKEN/SECRET）
+      calendar: false, // 「予定 ...」から Google カレンダー URL を生成
+    },
+    home: {
+      // 温湿度計は SwitchBot のデバイスタイプから自動選択し、deviceName の名前順で表示する。
+      lightDeviceNames: [],
+      // 「光あれ！」で実際にライトを点灯する場合のみ true。
+      allowControl: false,
     },
   },
 

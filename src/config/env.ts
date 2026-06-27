@@ -64,9 +64,13 @@ export interface AppConfig {
     enabled: boolean;
     model: string;
     skills: {
-      keywordReply: boolean;
+      callResponse: boolean;
       lightControl: boolean;
       calendar: boolean;
+    };
+    home: {
+      lightDeviceNames: string[];
+      allowControl: boolean;
     };
     key?: string;
     /** .env 由来 */
@@ -152,9 +156,13 @@ export async function loadConfig(): Promise<AppConfig> {
       enabled: file.shinoemon?.enabled ?? true,
       model: file.shinoemon?.model ?? "gpt-4",
       skills: {
-        keywordReply: file.shinoemon?.skills?.keywordReply ?? true,
+        callResponse: file.shinoemon?.skills?.callResponse ?? true,
         lightControl: file.shinoemon?.skills?.lightControl ?? false,
         calendar: file.shinoemon?.skills?.calendar ?? false,
+      },
+      home: {
+        lightDeviceNames: file.shinoemon?.home?.lightDeviceNames ?? [],
+        allowControl: file.shinoemon?.home?.allowControl ?? false,
       },
       key: optKey("SHINOEMON_NSEC"),
       apiKey: calendarApiKey,

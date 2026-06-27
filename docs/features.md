@@ -13,7 +13,7 @@
 
 | 公開Bot/機能 | 内部 skill / 処理 | 種別 | config key | 投稿鍵 (.env) | その他の秘密 | 概要 |
 | --- | --- | --- | --- | --- | --- | --- |
-| ShinoemonBot（しのえもん） | `keywordReply` / `lightControl` / `calendar` | 応答Bot | `shinoemon` | `SHINOEMON_NSEC` | `OPENROUTER/OPENAI_API_KEY`（任意）、`SWITCH_BOT_TOKEN/SECRET`（照明操作時） | キャラを持つオーケストレーションBot。内部 skill を選んで応答 |
+| ShinoemonBot（しのえもん） | `callResponse` / `lightControl` / `calendar` | 応答Bot | `shinoemon` | `SHINOEMON_NSEC` | `OPENROUTER/OPENAI_API_KEY`（calendar時任意）、`SWITCH_BOT_TOKEN/SECRET`（lightControl時） | キャラを持つオーケストレーションBot。現在は呼びかけ応答が基本 |
 | FlowmeterChanBot（流速ちゃん） | `command` | 応答Bot | `flowmeterChan` | `FLOWMETER_CHAN_NSEC` | - | 流速計への会話。投稿数の増減をコメント |
 | FlowmeterJob（流速ちゃん） | `job` | 定期Job | `flowmeterChan` | `FLOWMETER_CHAN_NSEC` | - | リレー流速を定期計測し集計を投稿（NIP-78 チャート保存） |
 | ManagementBot | 管理 | 応答Bot | `management` | `MANAGEMENT_NSEC` | - | 自分宛コマンドで Bot の状態確認/有効・無効切替 |
@@ -25,29 +25,29 @@
 
 ### ShinoemonBot（しのえもん）
 
-しのえもんは公開Botとして 1 体です。内部で `keywordReply` / `lightControl` / `calendar`
-skill を順番に評価し、最初にマッチした skill だけを実行します。
+しのえもんは公開Botとして 1 体です。内部で `callResponse` / `lightControl` / `calendar`
+skill を順番に評価し、最初にマッチした skill だけを実行します。現在の基本動作は
+**「しのえもん」と呼ばれたら返事をする**だけです。
 
-#### keywordReply skill
+#### callResponse skill
 
 | トリガー（正規表現） | 条件 | 応答 |
 | --- | --- | --- |
-| `^サモン！` | 先頭一致。IoT側の `サモン` 反応より優先 | `サーモン！` |
-| `^(かみさま\|神様)$` | 本文がこれだけ | `よんだ？` |
-| `サーモン` / `ｻｰﾓﾝ` | 部分一致 | `ﾝﾅｧ～!!!` |
-| `サモン` / `ｻﾓﾝ` | 部分一致 | `サモン！サーモン！` |
-| `サモーン` / `ｻﾓｰﾝ` | 部分一致 | `ﾅｧﾝ!!!` |
-| `salmon` | 部分一致（大小無視） | `👀` |
+| `^しのえもん[？?！!。.\\s]*$` | 本文が呼びかけだけ | `呼びましたか？` |
+
+今は `サモン` / `サーモン` / `神様` / `salmon` など、特定語句への自動応答はしません。
 
 #### lightControl skill
 
-自分宛リプライ＋SwitchBot 設定ありのときだけ反応します。
+SwitchBot 設定ありのときだけ反応します。温湿度計は SwitchBot の温湿度系デバイスを自動選択し、
+`deviceName` の名前順で表示します。ライトは `shinoemon.home.lightDeviceNames` で指定できます
+（未指定ならライト系デバイスを自動選択）。
 
 | トリガー | 条件 | 応答 |
 | --- | --- | --- |
-| `^光ある？` | 自分宛リプライ＋SwitchBot 設定あり | 点灯確認 → `光あるよ` / `光ないよ` |
-| `^光あれ` | 同上 | 点灯 → `世界は光に包まれた`（失敗時 `光を操作できなかった`） |
-| `^光ないよ` | 同上 | 消灯 → `闇に還した`（失敗時 `光を操作できなかった`） |
+| `^まいへや$` | 温湿度計が取得できる | 自宅の温度・湿度を返す |
+| `^光ある？$` | ライト状態が取得できる | 指定ライトごとの点灯状況を返す |
+| `^光あれ！$` | `allowControl: true` | 指定ライトを点灯し、成功時 `光あれ` |
 
 #### calendar skill
 
@@ -94,8 +94,7 @@ Nostr へは返信せず、一致時に Discord 通知のみ。
 
 ## 注意点・既知の重複
 
-- **「サモン！」の二重応答は解消済み**: しのえもん内部で `^サモン！` を先に処理するため、
-  IoT 由来の `サモン` 応答とは二重に反応しません。
-- **全角/半角カナ**: しのえもんの `keywordReply` skill は半角カナ（`ｻｰﾓﾝ` など）も拾います。
+- **単語応答は停止中**: `サモン` / `サーモン` などには反応しません。
+- **IoT は明示的に有効化した時だけ**: `lightControl` skill と SwitchBot 設定が揃った時だけ照明操作に反応します。
 - **クールダウン**: 応答系 Bot は投稿者ごとに `cooldownSec`（既定20秒）で連投抑止。
   ManagementBot は管理操作のため抑止対象外。

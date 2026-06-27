@@ -62,7 +62,10 @@ npm start
 | `relays.subscribe` / `relays.publish` | 購読 / 投稿の既定リレー |
 | `<Bot/機能>.enabled` | その公開Bot/機能の有効/無効。`true` にしたら下表の秘密を `.env` に用意する |
 | `shinoemon.model` | しのえもんの予定解析などで使う LLM モデル名 |
-| `shinoemon.skills.*` | しのえもん内部 skill（`keywordReply` / `lightControl` / `calendar`）の有効/無効 |
+| `shinoemon.skills.*` | しのえもん内部 skill（`callResponse` / `lightControl` / `calendar`）の有効/無効 |
+| `shinoemon.home.lightDeviceNames` | 「光ある？」「光あれ！」で使う SwitchBot ライト名。空ならライト系デバイスを自動選択 |
+| 温湿度計 | 設定不要。SwitchBot の温湿度系デバイスを自動選択し、`deviceName` の名前順で表示 |
+| `shinoemon.home.allowControl` | `true` の時だけ「光あれ！」で実際にライトを点灯する |
 | `monitor.keywords` / `npubs` / `mentionNpubs` | 監視するキーワード / 投稿者 / メンション宛先 |
 | `<Bot/機能>.cron` | 定期ジョブの cron スケジュール |
 | `<Bot/機能>.relays` | その機能が使うリレー（下記「リレー指定」参照） |
@@ -77,7 +80,7 @@ npm start
 
 | 公開Bot/機能 | 投稿鍵（`.env`） | その他の秘密（`.env`） | Nostr 投稿 |
 | --- | --- | --- | --- |
-| `shinoemon` | `SHINOEMON_NSEC` 必須 | `OPENROUTER_API_KEY` / `OPENAI_API_KEY`（予定解析で任意）、`SWITCH_BOT_TOKEN` / `SWITCH_BOT_SECRET`（照明操作時） | する |
+| `shinoemon` | `SHINOEMON_NSEC` 必須 | `OPENROUTER_API_KEY` / `OPENAI_API_KEY`（calendar skill 有効時に任意）、`SWITCH_BOT_TOKEN` / `SWITCH_BOT_SECRET`（lightControl skill 有効時） | する |
 | `flowmeterChan` | `FLOWMETER_CHAN_NSEC` 必須（command/job 共通） | - | する |
 | `management` | `MANAGEMENT_NSEC` 必須 | - | する |
 | `monitor` | **不要** | `DISCORD_WEBHOOK_URL` 必須 | **しない（Discord 通知のみ）** |
@@ -90,7 +93,7 @@ npm start
 **鍵は「公開Botごと」に持ちます。「既定鍵 / メインアカウント」という概念はありません。**
 
 - `<Bot>_NSEC`: その公開Botが**どのアカウントとして投稿するか**を表す鍵。
-- しのえもん内部の skill（キーワード応答 / 照明 / 予定）は、すべて `SHINOEMON_NSEC` で投稿します。
+- しのえもん内部の skill（呼びかけ応答 / 照明 / 予定）は、すべて `SHINOEMON_NSEC` で投稿します。
 - 流速ちゃんのコマンド応答と定期ジョブは、どちらも `FLOWMETER_CHAN_NSEC` で投稿します。
 - `monitor` は Nostr へ投稿しない監視系（read-only）なので **NSEC は不要**。`DISCORD_WEBHOOK_URL` だけ必要です。
 - `METADATA_KEYS`: これだけ性質が異なります。MetadataRefreshJob が kind:0 を再 Publish する
@@ -137,7 +140,7 @@ npm start
 
 | 機能 | 種別 | 参考元リポジトリ |
 | --- | --- | --- |
-| ShinoemonBot（Salmon/Calendar/Iot skill）/ MonitorBot 等 | イベント Bot | OnlineConcierge / NostrIot |
+| ShinoemonBot（call/calendar/light skill）/ MonitorBot 等 | イベント Bot | OnlineConcierge / NostrIot |
 | FlowmeterChanBot / FlowmeterJob | 会話 Bot + 定期ジョブ | nostr-flowmeter-batch |
 | MetadataRefreshJob | 定期ジョブ | nostr-metadata-enhancer |
 

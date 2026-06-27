@@ -59,7 +59,7 @@ function registerBots(manager: BotManager, config: AppConfig): void {
       ? new SwitchBotClient({
           token: config.shinoemon.token,
           secret: config.shinoemon.secret,
-          allowControl: true,
+          allowControl: config.shinoemon.home.allowControl,
           testMode: config.testMode,
         })
       : null;
@@ -70,6 +70,7 @@ function registerBots(manager: BotManager, config: AppConfig): void {
       createShinoemonBot({
         skills: config.shinoemon.skills,
         switchBot,
+        home: config.shinoemon.home,
         calendar: {
           apiKey: config.shinoemon.apiKey,
           model: config.shinoemon.model,

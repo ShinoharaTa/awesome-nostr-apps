@@ -24,15 +24,26 @@ function buildManager(client: MockNostrClient): BotManager {
 }
 
 describe("ShinoemonBot", () => {
-  it("replies サーモン！ to サモン！ posts", async () => {
+  it("replies 呼びましたか？ when called by name", async () => {
+    const client = new MockNostrClient();
+    const manager = buildManager(client);
+    manager.register(withId(createTestShinoemonBot()));
+
+    await manager.handleEvent(createMockEvent({ content: "しのえもん" }));
+
+    expect(client.sent).toHaveLength(1);
+    expect(client.sent[0].content).toBe("呼びましたか？");
+  });
+
+  it("does not react to salmon-related words", async () => {
     const client = new MockNostrClient();
     const manager = buildManager(client);
     manager.register(withId(createTestShinoemonBot()));
 
     await manager.handleEvent(createMockEvent({ content: "サモン！" }));
+    await manager.handleEvent(createMockEvent({ content: "サーモン食べたい" }));
 
-    expect(client.sent).toHaveLength(1);
-    expect(client.sent[0].content).toBe("サーモン！");
+    expect(client.sent).toHaveLength(0);
   });
 
   it("ignores unrelated posts", async () => {
@@ -68,8 +79,8 @@ describe("ManagementBot", () => {
     await manager.handleEvent(createReplyToMe("!disable ShinoemonBot", identity.pubkey));
     client.clear();
 
-    // ShinoemonBot is now disabled, so サモン！ should get no reply
-    await manager.handleEvent(createMockEvent({ content: "サモン！" }));
+    // ShinoemonBot is now disabled, so しのえもん should get no reply
+    await manager.handleEvent(createMockEvent({ content: "しのえもん" }));
     expect(client.sent).toHaveLength(0);
   });
 
@@ -87,11 +98,15 @@ describe("ManagementBot", () => {
 function createTestShinoemonBot(): BotHandler {
   return createShinoemonBot({
     skills: {
-      keywordReply: true,
+      callResponse: true,
       lightControl: false,
       calendar: false,
     },
     switchBot: null,
+    home: {
+      lightDeviceNames: [],
+      allowControl: false,
+    },
     calendar: {
       model: "gpt-4",
     },
