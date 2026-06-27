@@ -52,7 +52,7 @@ export async function countByKind(
 }
 
 /**
- * 指定 author の投稿数を時間窓で数える。FlowmeterCommandBot の分析用。
+ * 指定 author の投稿数を時間窓で数える。FlowmeterChanBot の分析用。
  */
 export async function countPosts(
   relays: string[],

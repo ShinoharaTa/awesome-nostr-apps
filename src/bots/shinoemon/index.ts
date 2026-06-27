@@ -1,0 +1,85 @@
+import type { Event } from "nostr-tools";
+import {
+  type BotContext,
+  type BotHandler,
+  actionFromFn,
+  filterFromFn,
+} from "../../core/bot-handler.js";
+import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
+import { createCalendarBot } from "../calendar/index.js";
+import { createIoTBot } from "./iot/index.js";
+import { createSalmonBot } from "./salmon/index.js";
+
+export interface ShinoemonSkills {
+  keywordReply: boolean;
+  lightControl: boolean;
+  calendar: boolean;
+}
+
+export interface ShinoemonOptions {
+  skills: ShinoemonSkills;
+  switchBot: SwitchBotClient | null;
+  calendar: {
+    apiKey?: string;
+    model: string;
+  };
+}
+
+/**
+ * しのえもん。
+ *
+ * 公開 Bot としては 1 体に見せ、内部ではキーワード応答・照明操作・予定作成などの
+ * skill を順番に評価する。将来的に LLM/Agent が skill を選ぶ形へ拡張しやすいよう、
+ * ここをオーケストレーション層にする。
+ */
+export function createShinoemonBot(options: ShinoemonOptions): BotHandler {
+  const skills = buildSkills(options);
+
+  const filter = filterFromFn((event: Event, ctx: BotContext) => {
+    if (event.pubkey === ctx.client.getPublicKey()) return false;
+    return skills.some((skill) => skill.enabled && skill.filter.matches(event, ctx));
+  });
+
+  const action = actionFromFn(async (event: Event, ctx: BotContext) => {
+    const skill = skills.find((candidate) => candidate.enabled && candidate.filter.matches(event, ctx));
+    if (!skill) return;
+    await skill.action.execute(event, ctx);
+  });
+
+  return {
+    name: "ShinoemonBot",
+    filter,
+    action,
+    enabled: true,
+  };
+}
+
+function buildSkills(options: ShinoemonOptions): BotHandler[] {
+  const skills: BotHandler[] = [];
+
+  if (options.skills.calendar) {
+    skills.push(
+      createCalendarBot({
+        apiKey: options.calendar.apiKey,
+        model: options.calendar.model,
+      }),
+    );
+  }
+
+  if (options.skills.keywordReply) {
+    // 「サモン！」は明示スキルを優先し、IoT 側の「サモン」反応との二重応答を避ける。
+    skills.push(createSalmonBot());
+  }
+
+  if (options.skills.keywordReply || options.skills.lightControl) {
+    skills.push(
+      createIoTBot({
+        switchBot: options.switchBot,
+        keywordReplyEnabled: options.skills.keywordReply,
+        lightControlEnabled: options.skills.lightControl,
+      }),
+    );
+  }
+
+  return skills;
+}

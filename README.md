@@ -5,6 +5,8 @@
 
 > EEW（緊急地震速報）配信は別システムとして扱い、このプロジェクトには含めません。
 
+機能の一覧とワード応答表は [docs/features.md](docs/features.md) にまとめています。
+
 ## アーキテクチャ
 
 3 つの実行レイヤに分かれています。
@@ -16,9 +18,9 @@
 ```text
 src/
   app.ts                アプリ起動。Bot とジョブを登録して開始する
-  config/               設定の一元管理（.env=秘密 / JSON=非機密 を統合）
+  config/               設定の一元管理（.env=秘密 / config.ts=非機密 を統合）
   core/                 NostrClient / EventBus / BotManager / JobRunner / logger
-  bots/                 イベント駆動 Bot（salmon / management / monitor / iot / flowmeter-command / calendar）
+  bots/                 イベント駆動 Bot（shinoemon / flowmeterChan / management / monitor）
   jobs/                 定期ジョブ（flowmeter / metadata-refresh / passport）
   integrations/         外部サービス連携（discord / switchbot / llm）
   shared/               時刻・タグ・レート制限などの共有ユーティリティ
@@ -46,31 +48,68 @@ npm start
 
 - **秘密情報 → `.env`**: 秘密鍵、API キー、Discord Webhook、SwitchBot トークン等。
   `.env` には他に `APP_ENV` のみを置きます。
-- **非機密設定 → JSON（`config.json`）**: リレー一覧、機能の有効/無効、cron、キーワード等。
+- **非機密設定 → `src/config/config.ts`**: リレー一覧、機能の有効/無効、cron、キーワード等。
+  TypeScript なのでコメント・型補完が使えます。`APP_ENV` 指定時は `src/config/config.<env>.ts`
+  を base にディープマージします。各項目の意味は下記「設定項目」を参照してください。
+
+### 設定項目（`config.ts`）
+
+| キー | 説明 |
+| --- | --- |
+| `logLevel` | ログ出力レベル（`debug` / `info` / `warn` / `error`） |
+| `testMode` | `true` の間は実際に投稿・外部操作せずログのみ |
+| `cooldownSec` | 応答系 Bot の連投抑止（秒・投稿者ごと） |
+| `relays.subscribe` / `relays.publish` | 購読 / 投稿の既定リレー |
+| `<Bot/機能>.enabled` | その公開Bot/機能の有効/無効。`true` にしたら下表の秘密を `.env` に用意する |
+| `shinoemon.model` | しのえもんの予定解析などで使う LLM モデル名 |
+| `shinoemon.skills.*` | しのえもん内部 skill（`keywordReply` / `lightControl` / `calendar`）の有効/無効 |
+| `monitor.keywords` / `npubs` / `mentionNpubs` | 監視するキーワード / 投稿者 / メンション宛先 |
+| `<Bot/機能>.cron` | 定期ジョブの cron スケジュール |
+| `<Bot/機能>.relays` | その機能が使うリレー（下記「リレー指定」参照） |
+| `passport.targetNpub` | パスポート投稿の対象 npub |
+
+### 機能 ↔ 秘密情報の対応
+
+公開Bot/機能の ON/OFF は `config.ts` の各項目 `enabled` で行い、`.env` には有効化したものが
+必要とする秘密だけを入れます。`config.ts` で有効にしたのに必要な秘密が欠けていると、
+投稿鍵が欠けている場合は**起動エラー**、Webhook / `METADATA_KEYS` が欠けている場合は
+**警告して自動無効化**になります。
+
+| 公開Bot/機能 | 投稿鍵（`.env`） | その他の秘密（`.env`） | Nostr 投稿 |
+| --- | --- | --- | --- |
+| `shinoemon` | `SHINOEMON_NSEC` 必須 | `OPENROUTER_API_KEY` / `OPENAI_API_KEY`（予定解析で任意）、`SWITCH_BOT_TOKEN` / `SWITCH_BOT_SECRET`（照明操作時） | する |
+| `flowmeterChan` | `FLOWMETER_CHAN_NSEC` 必須（command/job 共通） | - | する |
+| `management` | `MANAGEMENT_NSEC` 必須 | - | する |
+| `monitor` | **不要** | `DISCORD_WEBHOOK_URL` 必須 | **しない（Discord 通知のみ）** |
+| `passport` | `PASSPORT_NSEC` 必須 | - | する |
+| `metadataRefresh` | -（下記参照） | `METADATA_KEYS` 必須 | 対象鍵で再 Publish |
 
 ### 鍵（アカウント）の指定
 
-鍵はすべて `.env` に置き、`nsec1...` でも 64 文字 hex でも指定できます。
-**鍵は「機能ごと」に持ちます。「既定鍵 / メインアカウント」という概念はありません。**
+投稿鍵はすべて `.env` に置き、`nsec1...` でも 64 文字 hex でも指定できます。
+**鍵は「公開Botごと」に持ちます。「既定鍵 / メインアカウント」という概念はありません。**
 
-- `<機能>_NSEC`: その機能（Bot/Job）が**どのアカウントとして投稿するか**を表す鍵。
-  `config.json` で有効にした機能は、対応する `<機能>_NSEC` が**必須**です。
-  例: `SALMON_NSEC` / `MANAGEMENT_NSEC` / `CALENDAR_NSEC` / `IOT_NSEC` / `MONITOR_NSEC` /
-  `FLOWMETER_NSEC`（command と job 共通）/ `PASSPORT_NSEC`。
-- **共通アカウントにしたい場合**は、各 `<機能>_NSEC` に**同じ鍵**を入れます。
-  **機能ごとに分けたい場合**は、それぞれ別の鍵を入れます。
+- `<Bot>_NSEC`: その公開Botが**どのアカウントとして投稿するか**を表す鍵。
+- しのえもん内部の skill（キーワード応答 / 照明 / 予定）は、すべて `SHINOEMON_NSEC` で投稿します。
+- 流速ちゃんのコマンド応答と定期ジョブは、どちらも `FLOWMETER_CHAN_NSEC` で投稿します。
+- `monitor` は Nostr へ投稿しない監視系（read-only）なので **NSEC は不要**。`DISCORD_WEBHOOK_URL` だけ必要です。
 - `METADATA_KEYS`: これだけ性質が異なります。MetadataRefreshJob が kind:0 を再 Publish する
   **対象アカウント自身の秘密鍵リスト**で、Bot の投稿鍵ではありません。
 
 ### 読み込むファイルの切り替え（APP_ENV）
 
-`.env` の `APP_ENV` で読み込む JSON を切り替えます。
+`.env` の `APP_ENV` で読み込む設定を切り替えます。`APP_ENV` 指定時は base の `config.ts` に
+環境別ファイルを**ディープマージ**します（オブジェクトは再帰マージ、配列・スカラーは上書き）。
+環境別ファイルが存在しなければ base の `config.ts` のみを使います。
 
-| `APP_ENV` | 読み込むファイル |
+| `APP_ENV` | 読み込む設定 |
 | --- | --- |
-| 未指定 | `config.json`（Git 管理） |
-| `LOCAL` | `config.local.json`（ローカル上書き・`.gitignore` 対象） |
-| 任意の値 `X` | `config.<x>.json`（小文字化） |
+| 未指定 | `config.ts`（base・Git 管理） |
+| `LOCAL` | `config.ts` + `config.local.ts`（ローカル上書き・`.gitignore` 対象） |
+| 任意の値 `X` | `config.ts` + `config.<x>.ts`（小文字化） |
+
+設定ファイルは `src/config/` に置きます（base のみ Git 管理）。上書きは変えたい項目だけを
+`export default { ... } satisfies DeepPartial<FileConfig>` で書けば十分です。
 
 ### リレーは「使用する項目ごと」に指定
 
@@ -80,26 +119,26 @@ npm start
 | --- | --- |
 | `relays.subscribe` | リアルタイム購読（EventBus） |
 | `relays.publish` | 応答系 Bot の投稿先 |
-| `flowmeter.relays` | 流速計測・投稿（JP/GLOBAL の区別あり） |
+| `flowmeterChan.relays` | 流速計測・投稿（JP/GLOBAL の区別あり） |
 | `metadataRefresh.relays` | kind:0 の取得・再 Publish |
 | `passport.relays` | パスポート投稿先 |
 
-有効化した機能に必要なリレーが無い場合は起動時にエラーになります。必要な秘密鍵 / Webhook が
-無い機能は警告を出して自動的に無効化されます。
+有効化した機能に必要なリレーや投稿鍵（`<機能>_NSEC`）が無い場合は起動時にエラーになります。
+一方、`DISCORD_WEBHOOK_URL`（monitor）や `METADATA_KEYS`（metadataRefresh）が無い機能は、
+警告を出して自動的に無効化され、起動は継続します。
 
 ## テストモード
 
-`config.json` の `"testMode": true` を設定すると、Nostr への実投稿や外部サービスへの
-実操作を行わず、送信予定内容をログ出力します。`config.local.json` は既定で `testMode: true`
+`config.ts` の `testMode: true` を設定すると、Nostr への実投稿や外部サービスへの
+実操作を行わず、送信予定内容をログ出力します。`config.local.ts` は既定で `testMode: true`
 です。実運用前の動作確認に使ってください。
 
 ## 各機能の出自
 
 | 機能 | 種別 | 参考元リポジトリ |
 | --- | --- | --- |
-| SalmonBot / CalendarBot / MonitorBot 等 | イベント Bot | OnlineConcierge |
-| IoTBot（SwitchBot 連携） | イベント Bot + 外部連携 | NostrIot |
-| FlowmeterJob / FlowmeterCommandBot | 定期ジョブ + 会話 Bot | nostr-flowmeter-batch |
+| ShinoemonBot（Salmon/Calendar/Iot skill）/ MonitorBot 等 | イベント Bot | OnlineConcierge / NostrIot |
+| FlowmeterChanBot / FlowmeterJob | 会話 Bot + 定期ジョブ | nostr-flowmeter-batch |
 | MetadataRefreshJob | 定期ジョブ | nostr-metadata-enhancer |
 
-各機能の有効/無効やリレーは `config.json` で切り替えます。秘密情報の設定は `.env.sample` を参照してください。
+各機能の有効/無効やリレーは `config.ts` で切り替えます。秘密情報の設定は `.env.sample` を参照してください。

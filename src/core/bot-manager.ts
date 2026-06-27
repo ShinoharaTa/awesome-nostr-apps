@@ -2,9 +2,8 @@ import type { Event } from "nostr-tools";
 import { ReplyCooldown } from "../shared/rate-limit.js";
 import type { BotContext, BotHandler } from "./bot-handler.js";
 import type { EventBus } from "./event-bus.js";
-import type { Identity } from "./identity.js";
 import { logger } from "./logger.js";
-import { IdentityClient, type NostrClient } from "./nostr-client.js";
+import { IdentityClient, type NostrClient, ReadOnlyClient } from "./nostr-client.js";
 
 /**
  * Bot を登録し、EventBus 経由のイベントを各 Bot に振り分ける。
@@ -22,14 +21,18 @@ export class BotManager {
   ) {}
 
   /**
-   * Bot 固有の Identity（鍵）にバインドしたコンテキストを返す（Bot ごとにキャッシュ）。
-   * すべての Bot は自分の鍵を持つ前提（既定鍵 / メインアカウントは存在しない）。
+   * Bot のコンテキストを返す（Bot ごとにキャッシュ）。
+   * 投稿する Bot は自分の Identity（鍵）にバインド、readOnly な Bot は
+   * 鍵なしの ReadOnlyClient にバインドする。
    */
-  private contextFor(identity: Identity, name: string): BotContext {
-    let ctx = this.ctxCache.get(name);
+  private contextFor(handler: BotHandler): BotContext {
+    let ctx = this.ctxCache.get(handler.name);
     if (!ctx) {
-      ctx = { client: new IdentityClient(this.client, identity) };
-      this.ctxCache.set(name, ctx);
+      const client = handler.identity
+        ? new IdentityClient(this.client, handler.identity)
+        : new ReadOnlyClient(this.client);
+      ctx = { client };
+      this.ctxCache.set(handler.name, ctx);
     }
     return ctx;
   }
@@ -67,14 +70,14 @@ export class BotManager {
   async handleEvent(event: Event): Promise<void> {
     for (const handler of this.handlers) {
       if (!handler.enabled) continue;
-      if (!handler.identity) {
+      if (!handler.identity && !handler.readOnly) {
         logger.warn(
-          `Bot "${handler.name}" enabled without a key; skipping. Set its <feature>_NSEC.`,
+          `Bot "${handler.name}" enabled without a key; skipping. Set its <Bot>_NSEC.`,
         );
         continue;
       }
       try {
-        const ctx = this.contextFor(handler.identity, handler.name);
+        const ctx = this.contextFor(handler);
         if (!handler.filter.matches(event, ctx)) continue;
 
         if (this.isCoolingDown(handler, event.pubkey)) {

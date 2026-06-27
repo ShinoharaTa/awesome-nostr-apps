@@ -4,8 +4,8 @@ import {
   type BotHandler,
   actionFromFn,
   filterFromFn,
-} from "../../core/bot-handler.js";
-import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
+} from "../../../core/bot-handler.js";
+import type { SwitchBotClient } from "../../../integrations/switchbot/index.js";
 
 const KEYWORD_REPLIES: Array<{ pattern: RegExp; reply: string }> = [
   { pattern: /^(かみさま|神様)$/i, reply: "よんだ？" },
@@ -19,29 +19,48 @@ const LIGHT_COMMAND = /^光(ある？|あれ|ないよ)/;
 
 export interface IoTOptions {
   switchBot: SwitchBotClient | null;
+  keywordReplyEnabled?: boolean;
+  lightControlEnabled?: boolean;
 }
 
 /**
  * Nostr のキーワードに反応し、設定があれば SwitchBot 経由で照明を操作する Bot。
  * 出自: NostrIot index.js（キーワード反応 + 照明制御）。
+ * 分類: しのえもん（特定文言への応答系）。
  */
 export function createIoTBot(options: IoTOptions): BotHandler {
+  const keywordReplyEnabled = options.keywordReplyEnabled ?? true;
+  const lightControlEnabled = options.lightControlEnabled ?? true;
   const filter = filterFromFn((event: Event, ctx: BotContext) => {
     if (event.pubkey === ctx.client.getPublicKey()) return false;
-    if (KEYWORD_REPLIES.some(({ pattern }) => pattern.test(event.content))) return true;
-    if (options.switchBot && ctx.client.isReplyToMe(event) && LIGHT_COMMAND.test(event.content)) {
+    if (keywordReplyEnabled && KEYWORD_REPLIES.some(({ pattern }) => pattern.test(event.content))) {
+      return true;
+    }
+    if (
+      lightControlEnabled &&
+      options.switchBot &&
+      ctx.client.isReplyToMe(event) &&
+      LIGHT_COMMAND.test(event.content)
+    ) {
       return true;
     }
     return false;
   });
 
   const action = actionFromFn(async (event: Event, ctx: BotContext) => {
-    if (options.switchBot && ctx.client.isReplyToMe(event) && LIGHT_COMMAND.test(event.content)) {
+    if (
+      lightControlEnabled &&
+      options.switchBot &&
+      ctx.client.isReplyToMe(event) &&
+      LIGHT_COMMAND.test(event.content)
+    ) {
       await handleLight(event, ctx, options.switchBot);
       return;
     }
 
-    const match = KEYWORD_REPLIES.find(({ pattern }) => pattern.test(event.content));
+    const match = keywordReplyEnabled
+      ? KEYWORD_REPLIES.find(({ pattern }) => pattern.test(event.content))
+      : undefined;
     if (match) {
       await ctx.client.publishText(match.reply, { replyTo: event });
     }

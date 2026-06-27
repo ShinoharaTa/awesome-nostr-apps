@@ -25,7 +25,7 @@ export interface FlowmeterCommandOptions {
  * 流速計測 Bot への会話インターフェース。
  * 出自: nostr-flowmeter-batch の subscribe ハンドラ（定期処理から分離）。
  */
-export function createFlowmeterCommandBot(options: FlowmeterCommandOptions): BotHandler {
+export function createFlowmeterChanBot(options: FlowmeterCommandOptions): BotHandler {
   const action = actionFromFn(async (event: Event, ctx: BotContext) => {
     if (/^流速ちゃん？/.test(event.content)) {
       await ctx.client.publishText("呼びましたか？", { replyTo: event });
@@ -37,7 +37,7 @@ export function createFlowmeterCommandBot(options: FlowmeterCommandOptions): Bot
   });
 
   return {
-    name: "FlowmeterCommandBot",
+    name: "FlowmeterChanBot",
     filter: new OrFilter([
       new RegexFilter(/^流速ちゃん？/),
       new AndFilter([
@@ -80,7 +80,7 @@ async function analysePosts(event: Event, ctx: BotContext, relays: string[]): Pr
 
     await ctx.client.publishText(text, { replyTo: event });
   } catch (error) {
-    logger.error("FlowmeterCommandBot analyse failed", { error: String(error) });
+    logger.error("FlowmeterChanBot analyse failed", { error: String(error) });
     await ctx.client.publishText("ちょっといま忙しい", { replyTo: event });
   }
 }

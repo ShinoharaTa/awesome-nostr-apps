@@ -20,14 +20,14 @@ export interface FlowmeterJobOptions {
   relays: RelayInfo[];
   schedule: string;
   enabled: boolean;
-  /** 投稿・NIP-78 保存に使う鍵 (hex)。FLOWMETER_NSEC 由来。 */
+  /** 投稿・NIP-78 保存に使う鍵 (hex)。FLOWMETER_CHAN_NSEC 由来。 */
   key?: string;
   spanMinutes?: number;
 }
 
 /**
  * リレー投稿流速を定期集計し、Nostr へ投稿しつつ NIP-78 にチャート用データを保存する。
- * 出自: nostr-flowmeter-batch の cron 処理（会話応答は FlowmeterCommandBot に分離）。
+ * 出自: nostr-flowmeter-batch の cron 処理（会話応答は FlowmeterChanBot に分離）。
  */
 export function createFlowmeterJob(options: FlowmeterJobOptions): Job {
   const span = options.spanMinutes ?? 10;

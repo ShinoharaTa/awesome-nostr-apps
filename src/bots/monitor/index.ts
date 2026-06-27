@@ -68,6 +68,8 @@ export function createMonitorBot(options: MonitorOptions): BotHandler {
     filter,
     action,
     enabled,
+    // Nostr へ投稿せず Discord 通知のみ。投稿鍵 (MONITOR_NSEC) は不要。
+    readOnly: true,
   };
 }
 

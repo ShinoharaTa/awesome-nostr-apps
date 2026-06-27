@@ -5,7 +5,8 @@ import type { PublishOptions } from "./nostr-client.js";
 /**
  * Bot から見た Nostr クライアント。Bot ごとに異なる Identity を割り当てられるよう、
  * NostrClient 全体ではなく投稿・自己判定に必要な操作だけを公開する。
- * NostrClient（メイン鍵）と IdentityClient（機能ごとの鍵）の双方がこれを満たす。
+ * 投稿する Bot は IdentityClient（機能ごとの鍵）、投稿しない監視系は
+ * ReadOnlyClient（鍵なし）がこれを満たす。
  */
 export interface BotClient {
   getPublicKey(): string;
@@ -48,10 +49,16 @@ export interface BotHandler {
    */
   cooldownSec?: number;
   /**
-   * この Bot 専用の投稿主体。未設定ならメイン鍵（既定 Identity）で動く。
-   * 設定すると別アカウントとして投稿・自己判定する。
+   * この Bot の投稿主体（鍵）。Nostr へ投稿する Bot は必須。
+   * 機能ごとに 1 つ持ち、共通アカウントにしたい場合は複数機能へ同じ鍵を入れる。
+   * readOnly な Bot（投稿しない監視系）では不要。
    */
   identity?: Identity;
+  /**
+   * true なら投稿しない読み取り専用 Bot。鍵（identity）を要求せず、
+   * 鍵なしのコンテキストで動く（例: MonitorBot は Discord 通知のみ）。
+   */
+  readOnly?: boolean;
 }
 
 export abstract class BaseBotFilter implements BotFilter {

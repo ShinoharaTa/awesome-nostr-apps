@@ -1,10 +1,8 @@
-import { createCalendarBot } from "./bots/calendar/index.js";
-import { createFlowmeterCommandBot } from "./bots/flowmeter-command/index.js";
-import { createIoTBot } from "./bots/iot/index.js";
+import { createFlowmeterChanBot } from "./bots/flowmeter-command/index.js";
 import { createManagementBot } from "./bots/management/index.js";
 import { createMonitorBot } from "./bots/monitor/index.js";
-import { createSalmonBot } from "./bots/salmon/index.js";
-import { loadConfig } from "./config/env.js";
+import { createShinoemonBot } from "./bots/shinoemon/index.js";
+import { type AppConfig, loadConfig } from "./config/env.js";
 import type { BotHandler } from "./core/bot-handler.js";
 import { BotManager } from "./core/bot-manager.js";
 import { EventBus } from "./core/event-bus.js";
@@ -18,7 +16,7 @@ import { createMetadataRefreshJob } from "./jobs/metadata-refresh/index.js";
 import { createPassportJob } from "./jobs/passport/index.js";
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = await loadConfig();
   configureLogger(config.logLevel);
 
   if (config.testMode) {
@@ -45,7 +43,7 @@ async function main(): Promise<void> {
   setupShutdown(bus, jobRunner, client);
 }
 
-function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>): void {
+function registerBots(manager: BotManager, config: AppConfig): void {
   const cooldown = config.cooldownSec;
 
   // 管理コマンドは管理者操作なので抑止しない
@@ -56,34 +54,49 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
     }),
   );
 
+  const switchBot =
+    config.shinoemon.skills.lightControl && config.shinoemon.token && config.shinoemon.secret
+      ? new SwitchBotClient({
+          token: config.shinoemon.token,
+          secret: config.shinoemon.secret,
+          allowControl: true,
+          testMode: config.testMode,
+        })
+      : null;
+
   // 応答系 Bot は暴走対策として投稿者ごとにクールダウンを強制する
   manager.register(
-    configure(createSalmonBot(), {
-      enabled: config.salmon.enabled,
-      cooldownSec: cooldown,
-      key: config.salmon.key,
-    }),
-  );
-  manager.register(
     configure(
-      createFlowmeterCommandBot({
-        relays: config.flowmeter.relays.map((relay) => relay.url),
-        enabled: config.flowmeter.enabled,
+      createShinoemonBot({
+        skills: config.shinoemon.skills,
+        switchBot,
+        calendar: {
+          apiKey: config.shinoemon.apiKey,
+          model: config.shinoemon.model,
+        },
       }),
-      { enabled: config.flowmeter.enabled, cooldownSec: cooldown, key: config.flowmeter.key },
+      {
+        enabled: config.shinoemon.enabled,
+        cooldownSec: cooldown,
+        key: config.shinoemon.key,
+      },
     ),
   );
   manager.register(
     configure(
-      createCalendarBot({
-        apiKey: config.calendar.apiKey,
-        model: config.calendar.model,
+      createFlowmeterChanBot({
+        relays: config.flowmeterChan.relays.map((relay) => relay.url),
+        enabled: config.flowmeterChan.enabled && config.flowmeterChan.command,
       }),
-      { enabled: config.calendar.enabled, cooldownSec: cooldown, key: config.calendar.key },
+      {
+        enabled: config.flowmeterChan.enabled && config.flowmeterChan.command,
+        cooldownSec: cooldown,
+        key: config.flowmeterChan.key,
+      },
     ),
   );
 
-  // MonitorBot は Nostr へ応答せず Discord 通知のため抑止対象外
+  // MonitorBot は Nostr へ投稿せず Discord 通知のみ (readOnly)。投稿鍵は不要。
   manager.register(
     configure(
       createMonitorBot({
@@ -93,32 +106,18 @@ function registerBots(manager: BotManager, config: ReturnType<typeof loadConfig>
         mentionNpubs: config.monitor.mentionNpubs,
         testMode: config.testMode,
       }),
-      { enabled: config.monitor.enabled, key: config.monitor.key },
+      { enabled: config.monitor.enabled },
     ),
-  );
-
-  const switchBot =
-    config.iot.token && config.iot.secret
-      ? new SwitchBotClient({
-          token: config.iot.token,
-          secret: config.iot.secret,
-          allowControl: config.iot.allowControl,
-          testMode: config.testMode,
-        })
-      : null;
-  manager.register(
-    configure(createIoTBot({ switchBot }), {
-      enabled: config.iot.enabled,
-      cooldownSec: cooldown,
-      key: config.iot.key,
-    }),
   );
 }
 
 interface BotSetup {
   enabled: boolean;
   cooldownSec?: number;
-  /** 機能ごとの上書き鍵 (hex)。未設定ならメイン鍵で動く。 */
+  /**
+   * 機能ごとの投稿鍵 (hex)。Nostr へ投稿する Bot は必須。
+   * readOnly な Bot（MonitorBot など）では渡さない。
+   */
   key?: string;
 }
 
@@ -129,18 +128,14 @@ function configure(handler: BotHandler, setup: BotSetup): BotHandler {
   return handler;
 }
 
-function registerJobs(
-  runner: JobRunner,
-  client: NostrClient,
-  config: ReturnType<typeof loadConfig>,
-): void {
+function registerJobs(runner: JobRunner, client: NostrClient, config: AppConfig): void {
   runner.register(
     createFlowmeterJob({
       client,
-      relays: config.flowmeter.relays,
-      schedule: config.flowmeter.cron,
-      enabled: config.flowmeter.enabled,
-      key: config.flowmeter.key,
+      relays: config.flowmeterChan.relays,
+      schedule: config.flowmeterChan.cron,
+      enabled: config.flowmeterChan.enabled && config.flowmeterChan.job,
+      key: config.flowmeterChan.key,
     }),
   );
 

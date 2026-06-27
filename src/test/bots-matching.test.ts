@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createIoTBot } from "../bots/iot/index.js";
+import { createIoTBot } from "../bots/shinoemon/iot/index.js";
 import { createMonitorBot } from "../bots/monitor/index.js";
 import type { BotClient, BotContext } from "../core/bot-handler.js";
 import { MockNostrClient, createMockEvent } from "./helpers/mock-client.js";

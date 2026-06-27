@@ -224,3 +224,31 @@ export class IdentityClient implements BotClient {
     return this.base.getProfile(pubkey, relays);
   }
 }
+
+/**
+ * 鍵を持たない読み取り専用クライアント。投稿しない監視系 Bot（例: MonitorBot）向け。
+ * 自己 pubkey は持たないため自己判定は常に false、投稿しようとすると例外を投げる。
+ */
+export class ReadOnlyClient implements BotClient {
+  constructor(private readonly base: NostrClient) {}
+
+  getPublicKey(): string {
+    return "";
+  }
+
+  getNpub(): string {
+    return "";
+  }
+
+  isReplyToMe(): boolean {
+    return false;
+  }
+
+  publishText(): Promise<string | null> {
+    throw new Error("ReadOnlyClient cannot publish. Assign an identity (key) to post.");
+  }
+
+  getProfile(pubkey: string, relays?: string[]): Promise<Record<string, unknown> | null> {
+    return this.base.getProfile(pubkey, relays);
+  }
+}

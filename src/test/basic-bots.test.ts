@@ -2,7 +2,7 @@ import { generateSecretKey } from "nostr-tools";
 import { bytesToHex } from "nostr-tools/utils";
 import { describe, expect, it } from "vitest";
 import { createManagementBot } from "../bots/management/index.js";
-import { createSalmonBot } from "../bots/salmon/index.js";
+import { createShinoemonBot } from "../bots/shinoemon/index.js";
 import type { BotHandler } from "../core/bot-handler.js";
 import { BotManager } from "../core/bot-manager.js";
 import type { EventBus } from "../core/event-bus.js";
@@ -23,11 +23,11 @@ function buildManager(client: MockNostrClient): BotManager {
   return new BotManager(client as unknown as NostrClient, fakeBus);
 }
 
-describe("SalmonBot", () => {
+describe("ShinoemonBot", () => {
   it("replies サーモン！ to サモン！ posts", async () => {
     const client = new MockNostrClient();
     const manager = buildManager(client);
-    manager.register(withId(createSalmonBot()));
+    manager.register(withId(createTestShinoemonBot()));
 
     await manager.handleEvent(createMockEvent({ content: "サモン！" }));
 
@@ -38,7 +38,7 @@ describe("SalmonBot", () => {
   it("ignores unrelated posts", async () => {
     const client = new MockNostrClient();
     const manager = buildManager(client);
-    manager.register(withId(createSalmonBot()));
+    manager.register(withId(createTestShinoemonBot()));
 
     await manager.handleEvent(createMockEvent({ content: "こんにちは" }));
 
@@ -51,24 +51,24 @@ describe("ManagementBot", () => {
     const client = new MockNostrClient();
     const manager = buildManager(client);
     manager.register(withId(createManagementBot(manager)));
-    manager.register(withId(createSalmonBot()));
+    manager.register(withId(createTestShinoemonBot()));
 
     await manager.handleEvent(createReplyToMe("!bots", identity.pubkey));
 
     expect(client.sent).toHaveLength(1);
-    expect(client.sent[0].content).toContain("SalmonBot: 有効");
+    expect(client.sent[0].content).toContain("ShinoemonBot: 有効");
   });
 
   it("disables a bot on !disable", async () => {
     const client = new MockNostrClient();
     const manager = buildManager(client);
     manager.register(withId(createManagementBot(manager)));
-    manager.register(withId(createSalmonBot()));
+    manager.register(withId(createTestShinoemonBot()));
 
-    await manager.handleEvent(createReplyToMe("!disable SalmonBot", identity.pubkey));
+    await manager.handleEvent(createReplyToMe("!disable ShinoemonBot", identity.pubkey));
     client.clear();
 
-    // SalmonBot is now disabled, so サモン！ should get no reply
+    // ShinoemonBot is now disabled, so サモン！ should get no reply
     await manager.handleEvent(createMockEvent({ content: "サモン！" }));
     expect(client.sent).toHaveLength(0);
   });
@@ -83,3 +83,17 @@ describe("ManagementBot", () => {
     expect(client.sent).toHaveLength(0);
   });
 });
+
+function createTestShinoemonBot(): BotHandler {
+  return createShinoemonBot({
+    skills: {
+      keywordReply: true,
+      lightControl: false,
+      calendar: false,
+    },
+    switchBot: null,
+    calendar: {
+      model: "gpt-4",
+    },
+  });
+}

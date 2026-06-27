@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { logger } from "../core/logger.js";
 import { toHexKey } from "../shared/keys.js";
 import type { RelayInfo } from "./relays.js";
-import { type FileConfig, readFileConfig } from "./schema.js";
+import { type FileConfig, loadFileConfig } from "./schema.js";
 
 dotenv.config();
 
@@ -23,7 +23,8 @@ function list(name: string): string[] {
 }
 
 /**
- * 機能ごとの上書き鍵 (nsec/hex) を読む。未設定なら undefined（=メイン鍵を使う）。
+ * 機能ごとの投稿鍵 (nsec/hex) を読む。未設定なら undefined。
+ * その機能が config.ts で有効なら validate() で必須チェックされる。
  * 不正な鍵は分かりやすいエラーにする。
  */
 function optKey(name: string): string | undefined {
@@ -37,12 +38,13 @@ function optKey(name: string): string | undefined {
 }
 
 /**
- * アプリ全体の設定。秘密情報は .env、非機密設定は JSON(config.*.json) から読み、
+ * アプリ全体の設定。秘密情報は .env、非機密設定は config.ts から読み、
  * ここで 1 つの構造体に統合する。各 Bot / Job はここだけを参照する。
  */
 export interface AppConfig {
   appEnv?: string;
-  configPath: string;
+  /** 読み込み元の説明（例: "config.ts + config.local.ts"） */
+  configSource: string;
   testMode: boolean;
   logLevel: string;
   cooldownSec: number;
@@ -53,18 +55,25 @@ export interface AppConfig {
   };
 
   /**
-   * key: 機能ごとの投稿鍵 (.env の <機能>_NSEC 由来, hex)。
-   * 有効な機能は鍵必須。共通アカウントにしたい場合は各機能へ同じ鍵を入れる。
+   * key: 公開 Bot ごとの投稿鍵 (.env の <Bot>_NSEC 由来, hex)。
+   * 有効な Bot は鍵必須。内部 skill は公開 Bot の鍵で投稿する。
    */
-  salmon: { enabled: boolean; key?: string };
   management: { enabled: boolean; key?: string };
 
-  calendar: {
+  shinoemon: {
     enabled: boolean;
     model: string;
+    skills: {
+      keywordReply: boolean;
+      lightControl: boolean;
+      calendar: boolean;
+    };
     key?: string;
     /** .env 由来 */
     apiKey?: string;
+    /** .env 由来 */
+    token?: string;
+    secret?: string;
   };
 
   monitor: {
@@ -72,22 +81,17 @@ export interface AppConfig {
     keywords: string[];
     npubs: string[];
     mentionNpubs: string[];
-    key?: string;
-    /** .env 由来 */
+    /**
+     * .env 由来。MonitorBot は Nostr へ投稿せず Discord 通知のみ行うため、
+     * 投稿鍵 (NSEC) は不要。この Webhook URL が必須。
+     */
     webhookUrl?: string;
   };
 
-  iot: {
+  flowmeterChan: {
     enabled: boolean;
-    allowControl: boolean;
-    key?: string;
-    /** .env 由来 */
-    token?: string;
-    secret?: string;
-  };
-
-  flowmeter: {
-    enabled: boolean;
+    command: boolean;
+    job: boolean;
     cron: string;
     relays: RelayInfo[];
     key?: string;
@@ -112,11 +116,11 @@ export interface AppConfig {
 
 let cached: AppConfig | undefined;
 
-export function loadConfig(): AppConfig {
+export async function loadConfig(): Promise<AppConfig> {
   if (cached) return cached;
 
   // --- 秘密情報は .env から ---
-  // 鍵は「機能ごと」に持つ。共通アカウントにしたければ各 <機能>_NSEC へ同じ鍵を入れる。
+  // 鍵は「公開 Bot ごと」に持つ。内部 skill は公開 Bot の鍵で投稿する。
   // 「既定鍵 / メインアカウント」という概念は持たない。
   const appEnv = str("APP_ENV");
   const calendarApiKey = str("OPENROUTER_API_KEY") ?? str("OPENAI_API_KEY");
@@ -126,13 +130,13 @@ export function loadConfig(): AppConfig {
   // 再 Publish 対象アカウント自身の鍵（Bot の投稿鍵とは別物）
   const metadataKeys = list("METADATA_KEYS");
 
-  // --- 非機密設定は JSON から ---
-  const { config: file, path: configPath, fileName } = readFileConfig(appEnv);
-  logger.info(`Loaded config file: ${fileName}`);
+  // --- 非機密設定は config.ts(+config.<env>.ts) から ---
+  const { config: file, source } = await loadFileConfig(appEnv);
+  logger.info(`Loaded config: ${source}`);
 
   const merged: AppConfig = {
     appEnv,
-    configPath,
+    configSource: source,
     testMode: file.testMode ?? false,
     logLevel: file.logLevel ?? "info",
     cooldownSec: file.cooldownSec ?? 20,
@@ -142,14 +146,20 @@ export function loadConfig(): AppConfig {
       publish: file.relays.publish,
     },
 
-    salmon: { enabled: file.salmon?.enabled ?? true, key: optKey("SALMON_NSEC") },
     management: { enabled: file.management?.enabled ?? true, key: optKey("MANAGEMENT_NSEC") },
 
-    calendar: {
-      enabled: file.calendar?.enabled ?? false,
-      model: file.calendar?.model ?? "gpt-4",
-      key: optKey("CALENDAR_NSEC"),
+    shinoemon: {
+      enabled: file.shinoemon?.enabled ?? true,
+      model: file.shinoemon?.model ?? "gpt-4",
+      skills: {
+        keywordReply: file.shinoemon?.skills?.keywordReply ?? true,
+        lightControl: file.shinoemon?.skills?.lightControl ?? false,
+        calendar: file.shinoemon?.skills?.calendar ?? false,
+      },
+      key: optKey("SHINOEMON_NSEC"),
       apiKey: calendarApiKey,
+      token: switchBotToken,
+      secret: switchBotSecret,
     },
 
     monitor: {
@@ -157,23 +167,16 @@ export function loadConfig(): AppConfig {
       keywords: file.monitor?.keywords ?? [],
       npubs: file.monitor?.npubs ?? [],
       mentionNpubs: file.monitor?.mentionNpubs ?? [],
-      key: optKey("MONITOR_NSEC"),
       webhookUrl,
     },
 
-    iot: {
-      enabled: file.iot?.enabled ?? false,
-      allowControl: file.iot?.allowControl ?? false,
-      key: optKey("IOT_NSEC"),
-      token: switchBotToken,
-      secret: switchBotSecret,
-    },
-
-    flowmeter: {
-      enabled: file.flowmeter?.enabled ?? false,
-      cron: file.flowmeter?.cron ?? "*/10 * * * *",
-      relays: file.flowmeter?.relays ?? [],
-      key: optKey("FLOWMETER_NSEC"),
+    flowmeterChan: {
+      enabled: file.flowmeterChan?.enabled ?? false,
+      command: file.flowmeterChan?.command ?? true,
+      job: file.flowmeterChan?.job ?? true,
+      cron: file.flowmeterChan?.cron ?? "*/10 * * * *",
+      relays: file.flowmeterChan?.relays ?? [],
+      key: optKey("FLOWMETER_CHAN_NSEC"),
     },
 
     metadataRefresh: {
@@ -221,18 +224,24 @@ function validate(config: AppConfig, _file: FileConfig): void {
     logger.warn("metadataRefresh disabled: METADATA_KEYS is empty in .env");
     config.metadataRefresh.enabled = false;
   }
+  if (
+    config.shinoemon.enabled &&
+    config.shinoemon.skills.lightControl &&
+    (!config.shinoemon.token || !config.shinoemon.secret)
+  ) {
+    logger.warn("shinoemon lightControl skill disabled: SWITCH_BOT_TOKEN/SECRET is missing in .env");
+    config.shinoemon.skills.lightControl = false;
+  }
 
-  // 投稿する各機能は自分の鍵が必須（共通にしたい場合は各 <機能>_NSEC へ同じ鍵を入れる）
-  requireKey(config.salmon.enabled, config.salmon.key, "SALMON_NSEC");
+  // Nostr へ投稿する公開 Bot は自分の鍵が必須。内部 skill はその Bot の鍵を使う。
+  // monitor は投稿しない (Discord 通知のみ) ため鍵は不要。
+  requireKey(config.shinoemon.enabled, config.shinoemon.key, "SHINOEMON_NSEC");
   requireKey(config.management.enabled, config.management.key, "MANAGEMENT_NSEC");
-  requireKey(config.calendar.enabled, config.calendar.key, "CALENDAR_NSEC");
-  requireKey(config.iot.enabled, config.iot.key, "IOT_NSEC");
-  requireKey(config.monitor.enabled, config.monitor.key, "MONITOR_NSEC");
-  requireKey(config.flowmeter.enabled, config.flowmeter.key, "FLOWMETER_NSEC");
+  requireKey(config.flowmeterChan.enabled, config.flowmeterChan.key, "FLOWMETER_CHAN_NSEC");
   requireKey(config.passport.enabled, config.passport.key, "PASSPORT_NSEC");
 
-  if (config.flowmeter.enabled && config.flowmeter.relays.length === 0) {
-    throw new Error('flowmeter.enabled=true requires "flowmeter.relays".');
+  if (config.flowmeterChan.enabled && config.flowmeterChan.relays.length === 0) {
+    throw new Error('flowmeterChan.enabled=true requires "flowmeterChan.relays".');
   }
   if (config.passport.enabled && config.passport.relays.length === 0) {
     throw new Error('passport.enabled=true requires "passport.relays".');

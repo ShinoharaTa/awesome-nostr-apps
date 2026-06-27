@@ -1,61 +1,41 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readFileConfig, resolveConfigFileName } from "../config/schema.js";
+import { describe, expect, it } from "vitest";
+import { deepMerge, resolveOverrideName } from "../config/schema.js";
 
-describe("resolveConfigFileName", () => {
-  it("falls back to config.json when APP_ENV is unset", () => {
-    expect(resolveConfigFileName()).toBe("config.json");
-    expect(resolveConfigFileName("")).toBe("config.json");
-    expect(resolveConfigFileName("  ")).toBe("config.json");
+describe("resolveOverrideName", () => {
+  it("returns undefined when APP_ENV is unset (base config.ts only)", () => {
+    expect(resolveOverrideName()).toBeUndefined();
+    expect(resolveOverrideName("")).toBeUndefined();
+    expect(resolveOverrideName("  ")).toBeUndefined();
   });
 
-  it("uses lowercased APP_ENV as the file suffix", () => {
-    expect(resolveConfigFileName("LOCAL")).toBe("config.local.json");
-    expect(resolveConfigFileName("Production")).toBe("config.production.json");
+  it("builds a lowercased override filename from APP_ENV", () => {
+    expect(resolveOverrideName("LOCAL")).toBe("config.local.ts");
+    expect(resolveOverrideName("Production")).toBe("config.production.ts");
   });
 });
 
-describe("readFileConfig", () => {
-  let dir: string;
-
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "ana-config-"));
+describe("deepMerge", () => {
+  it("recursively merges objects and overrides scalars", () => {
+    const base = { a: 1, nested: { b: 2, c: 3 } };
+    const merged = deepMerge(base, { nested: { b: 9 } });
+    expect(merged).toEqual({ a: 1, nested: { b: 9, c: 3 } });
   });
 
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+  it("replaces arrays wholesale (does not concat)", () => {
+    const base = { relays: ["wss://a", "wss://b"] };
+    const merged = deepMerge(base, { relays: ["wss://x"] });
+    expect(merged.relays).toEqual(["wss://x"]);
   });
 
-  function writeConfig(name: string, body: unknown): void {
-    writeFileSync(join(dir, name), JSON.stringify(body), "utf8");
-  }
-
-  it("reads config.json when APP_ENV is unset", () => {
-    writeConfig("config.json", {
-      relays: { subscribe: ["wss://a"], publish: ["wss://b"] },
-    });
-    const { config, fileName } = readFileConfig(undefined, dir);
-    expect(fileName).toBe("config.json");
-    expect(config.relays.subscribe).toEqual(["wss://a"]);
+  it("does not mutate the base object", () => {
+    const base = { nested: { b: 2 } };
+    deepMerge(base, { nested: { b: 9 } });
+    expect(base.nested.b).toBe(2);
   });
 
-  it("reads the APP_ENV-specific file", () => {
-    writeConfig("config.local.json", {
-      relays: { subscribe: ["wss://local"], publish: ["wss://local"] },
-    });
-    const { config, fileName } = readFileConfig("LOCAL", dir);
-    expect(fileName).toBe("config.local.json");
-    expect(config.relays.publish).toEqual(["wss://local"]);
-  });
-
-  it("throws a helpful error when the file is missing", () => {
-    expect(() => readFileConfig("LOCAL", dir)).toThrow(/config\.local\.json/);
-  });
-
-  it("throws when required relays keys are missing", () => {
-    writeConfig("config.json", { relays: { subscribe: ["wss://a"] } });
-    expect(() => readFileConfig(undefined, dir)).toThrow(/relays\.subscribe.*relays\.publish/);
+  it("ignores undefined override values", () => {
+    const base = { a: 1, b: 2 };
+    const merged = deepMerge(base, { b: undefined });
+    expect(merged).toEqual({ a: 1, b: 2 });
   });
 });
