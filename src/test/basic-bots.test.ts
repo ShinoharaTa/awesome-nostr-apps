@@ -24,7 +24,7 @@ function buildManager(client: MockNostrClient): BotManager {
 }
 
 describe("ShinoemonBot", () => {
-  it("replies 呼びましたか？ when called by name", async () => {
+  it("replies よんだ？ when called by name", async () => {
     const client = new MockNostrClient();
     const manager = buildManager(client);
     manager.register(withId(createTestShinoemonBot()));
@@ -32,7 +32,21 @@ describe("ShinoemonBot", () => {
     await manager.handleEvent(createMockEvent({ content: "しのえもん" }));
 
     expect(client.sent).toHaveLength(1);
-    expect(client.sent[0].content).toBe("呼びましたか？");
+    expect(client.sent[0].content).toBe("よんだ？");
+  });
+
+  it("replies when called by name with a Nostr mention prefix", async () => {
+    const client = new MockNostrClient();
+    const manager = buildManager(client);
+    manager.register(withId(createTestShinoemonBot()));
+
+    await manager.handleEvent(
+      createMockEvent({
+        content: "nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq しのえもん",
+      }),
+    );
+
+    expect(client.sent[0].content).toBe("よんだ？");
   });
 
   it("does not react to salmon-related words", async () => {

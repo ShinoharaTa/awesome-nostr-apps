@@ -6,10 +6,11 @@ import {
   filterFromFn,
 } from "../../../core/bot-handler.js";
 import type { SwitchBotClient, SwitchBotDevice } from "../../../integrations/switchbot/index.js";
+import { normalizeCommandContent } from "../../../shared/nostr-content.js";
 
 const ROOM_COMMAND = /^まいへや[？?！!。.\s]*$/;
 const LIGHT_STATUS_COMMAND = /^光ある？[？?！!。.\s]*$/;
-const LIGHT_ON_COMMAND = /^光あれ！[？?！!。.\s]*$/;
+const LIGHT_ON_COMMAND = /^光あれ[？?！!。.\s]*$/;
 
 export interface IoTOptions {
   switchBot: SwitchBotClient | null;
@@ -28,12 +29,13 @@ export function createIoTBot(options: IoTOptions): BotHandler {
   const lightControlEnabled = options.lightControlEnabled ?? true;
   const filter = filterFromFn((event: Event, ctx: BotContext) => {
     if (event.pubkey === ctx.client.getPublicKey()) return false;
+    const content = normalizeCommandContent(event.content);
     if (
       lightControlEnabled &&
       options.switchBot &&
-      (ROOM_COMMAND.test(event.content) ||
-        LIGHT_STATUS_COMMAND.test(event.content) ||
-        LIGHT_ON_COMMAND.test(event.content))
+      (ROOM_COMMAND.test(content) ||
+        LIGHT_STATUS_COMMAND.test(content) ||
+        LIGHT_ON_COMMAND.test(content))
     ) {
       return true;
     }
@@ -41,14 +43,13 @@ export function createIoTBot(options: IoTOptions): BotHandler {
   });
 
   const action = actionFromFn(async (event: Event, ctx: BotContext) => {
+    const content = normalizeCommandContent(event.content);
     if (
       lightControlEnabled &&
       options.switchBot &&
-      (ROOM_COMMAND.test(event.content) ||
-        LIGHT_STATUS_COMMAND.test(event.content) ||
-        LIGHT_ON_COMMAND.test(event.content))
+      (ROOM_COMMAND.test(content) || LIGHT_STATUS_COMMAND.test(content) || LIGHT_ON_COMMAND.test(content))
     ) {
-      await handleHomeCommand(event, ctx, options.switchBot, options.home);
+      await handleHomeCommand(event, ctx, options.switchBot, options.home, content);
       return;
     }
 
@@ -72,20 +73,21 @@ async function handleHomeCommand(
   ctx: BotContext,
   switchBot: SwitchBotClient,
   home: HomeOptions,
+  content: string,
 ): Promise<void> {
   const devices = await switchBot.getDevices();
-  if (ROOM_COMMAND.test(event.content)) {
+  if (ROOM_COMMAND.test(content)) {
     await publishRoomStatus(event, ctx, switchBot, devices);
     return;
   }
 
   const lights = selectLights(devices, home.lightDeviceNames);
-  if (LIGHT_STATUS_COMMAND.test(event.content)) {
+  if (LIGHT_STATUS_COMMAND.test(content)) {
     await publishLightStatus(event, ctx, switchBot, lights);
     return;
   }
 
-  if (LIGHT_ON_COMMAND.test(event.content)) {
+  if (LIGHT_ON_COMMAND.test(content)) {
     await turnOnLights(event, ctx, switchBot, lights);
   }
 }

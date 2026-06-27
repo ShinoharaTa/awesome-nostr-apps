@@ -2,12 +2,12 @@ import type { Event } from "nostr-tools";
 import {
   type BotContext,
   type BotHandler,
-  RegexFilter,
   TextReplyAction,
   actionFromFn,
   filterFromFn,
 } from "../../core/bot-handler.js";
 import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
+import { normalizeCommandContent } from "../../shared/nostr-content.js";
 import { createCalendarBot } from "../calendar/index.js";
 import { createIoTBot } from "./iot/index.js";
 
@@ -91,8 +91,8 @@ function buildSkills(options: ShinoemonOptions): BotHandler[] {
 function createCallResponseSkill(): BotHandler {
   return {
     name: "ShinoemonCallResponseSkill",
-    filter: new RegexFilter(/^しのえもん[？?！!。.\s]*$/),
-    action: new TextReplyAction("呼びましたか？"),
+    filter: filterFromFn((event) => /^しのえもん[？?！!。.\s]*$/.test(normalizeCommandContent(event.content))),
+    action: new TextReplyAction("よんだ？"),
     enabled: true,
   };
 }

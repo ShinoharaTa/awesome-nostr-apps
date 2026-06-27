@@ -47,7 +47,7 @@ const config = {
     enabled: true, // 要 SHINOEMON_NSEC
     model: "gpt-4", // 将来の予定解析など、LLM が必要な skill のモデル
     skills: {
-      callResponse: true, // 「しのえもん」と呼ばれたら「呼びましたか？」と返す
+      callResponse: true, // 「しのえもん」と呼ばれたら「よんだ？」と返す
       lightControl: true, // まいへや/光ある？/光あれ！（要 SWITCH_BOT_TOKEN/SECRET）
       calendar: false, // 「予定 ...」から Google カレンダー URL を生成
     },

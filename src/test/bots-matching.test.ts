@@ -98,6 +98,32 @@ describe("IoTBot", () => {
     expect(switchBot.commands).toEqual([{ deviceId: "light-1", command: "turnOn" }]);
     expect(client.sent[0].content).toBe("光あれ");
   });
+
+  it("turns on lights for 光あれ without punctuation", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
+    ]);
+    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+
+    await bot.action.execute(createMockEvent({ content: "光あれ" }), ctxOf(client));
+
+    expect(switchBot.commands).toEqual([{ deviceId: "light-1", command: "turnOn" }]);
+  });
+
+  it("matches commands in mention-prefixed content", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
+    ]);
+    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const event = createMockEvent({ content: "nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq 光ある？" });
+
+    expect(bot.filter.matches(event, ctxOf(client))).toBe(true);
+    await bot.action.execute(event, ctxOf(client));
+
+    expect(client.sent[0].content).toBe("まいへやライト: ついてる");
+  });
 });
 
 class MockSwitchBotClient {
