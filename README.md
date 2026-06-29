@@ -42,6 +42,91 @@ npm run build
 npm start
 ```
 
+### Linux でデーモン化する（systemd）
+
+Ubuntu などの Linux では `systemd` service として登録します。以下はアプリを
+`/opt/awesome-nostr-apps` に置き、`nostrbot` ユーザーで動かす例です。
+
+事前準備:
+
+```bash
+sudo useradd --system --create-home --shell /usr/sbin/nologin nostrbot
+sudo mkdir -p /opt/awesome-nostr-apps
+sudo chown -R "$USER":"$USER" /opt/awesome-nostr-apps
+```
+
+リポジトリを配置し、`.env` を設定してビルドします。
+
+```bash
+cd /opt/awesome-nostr-apps
+npm install
+cp .env.sample .env
+# .env に SHINOEMON_NSEC / FLOWMETER_CHAN_NSEC などを設定
+npm run build
+sudo chown -R nostrbot:nostrbot /opt/awesome-nostr-apps
+```
+
+`/etc/systemd/system/awesome-nostr-apps.service` を作成します。
+
+```ini
+[Unit]
+Description=awesome-nostr-apps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nostrbot
+Group=nostrbot
+WorkingDirectory=/opt/awesome-nostr-apps
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/awesome-nostr-apps/dist/app.js
+Restart=always
+RestartSec=10
+
+# systemd/journald にログを送る
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`node` のパスが違う場合は `which node` の結果に合わせて `ExecStart` を変更してください。
+
+登録・起動:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable awesome-nostr-apps
+sudo systemctl start awesome-nostr-apps
+```
+
+状態確認・ログ確認:
+
+```bash
+systemctl status awesome-nostr-apps
+journalctl -u awesome-nostr-apps -f
+```
+
+停止・無効化:
+
+```bash
+sudo systemctl stop awesome-nostr-apps
+sudo systemctl disable awesome-nostr-apps
+```
+
+コードや設定を更新した場合は、再ビルドしてから再起動します。
+
+```bash
+cd /opt/awesome-nostr-apps
+git pull
+npm install
+npm run build
+sudo chown -R nostrbot:nostrbot /opt/awesome-nostr-apps
+sudo systemctl restart awesome-nostr-apps
+```
+
 ## 設定の考え方
 
 設定は「秘密情報」と「非機密設定」を分けて管理します。

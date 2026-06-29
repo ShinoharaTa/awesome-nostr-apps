@@ -55,7 +55,7 @@ const config = {
       // 温湿度計は SwitchBot のデバイスタイプから自動選択し、deviceName の名前順で表示する。
       lightDeviceNames: [],
       // 「光あれ！」で実際にライトを点灯する場合のみ true。
-      allowControl: false,
+      allowControl: true,
     },
   },
 
@@ -75,15 +75,15 @@ const config = {
     enabled: true, // 要 FLOWMETER_CHAN_NSEC
     command: true,
     job: true,
-    cron: "*/1 * * * *",
+    cron: "*/10 * * * *",
     relays: [
       { key: "shino3", name: "しの川", url: "wss://relay-jp.shino3.net", target: "jp" },
-      // { key: "yabumi", name: "やぶみ川", url: "wss://yabu.me", target: "jp" },
-      // { key: "kojira", name: "こじら川", url: "wss://r.kojira.io", target: "jp" },
-      // { key: "kirino", name: "きりの川", url: "wss://relay-jp.nostr.wirednet.jp", target: "jp" },
-      // { key: "c-stellar", name: "かすてら川", url: "wss://nrelay-jp.c-stellar.net", target: "jp" },
-      // { key: "kojira_g", name: "こじら大川", url: "wss://x.kojira.io", target: "all" },
-      // { key: "shino3_g", name: "しの川(G)", url: "wss://relay.nostx.io", target: "all" },
+      { key: "yabumi", name: "やぶみ川", url: "wss://yabu.me", target: "jp" },
+      { key: "kojira", name: "こじら川", url: "wss://r.kojira.io", target: "jp" },
+      { key: "kirino", name: "きりの川", url: "wss://relay-jp.nostr.wirednet.jp", target: "jp" },
+      { key: "c-stellar", name: "かすてら川", url: "wss://nrelay-jp.c-stellar.net", target: "jp" },
+      { key: "kojira_g", name: "こじら大川", url: "wss://x.kojira.io", target: "all" },
+      { key: "shino3_g", name: "しの川(G)", url: "wss://relay.nostx.io", target: "all" },
     ],
   },
 
