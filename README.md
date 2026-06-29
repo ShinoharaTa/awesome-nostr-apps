@@ -42,28 +42,32 @@ npm run build
 npm start
 ```
 
-### Linux でデーモン化する（systemd）
+### Debian/Ubuntu でデーモン化する（systemd）
 
-Ubuntu などの Linux では `systemd` service として登録します。以下はアプリを
-`/opt/awesome-nostr-apps` に置き、`nostrbot` ユーザーで動かす例です。
+Debian/Ubuntu 系 Linux（Proxmox LXC コンテナ含む）では `systemd` service として登録します。
+以下は、既に作成済みの Debian ベースコンテナ内で `/opt/awesome-nostr-apps` に配置し、
+専用ユーザーを作らず root（または現在のユーザー）で動かす手順です。Node.js 20 以上が必要です。
 
-事前準備:
+コンテナに入り、基本パッケージと Node.js を入れます。
 
 ```bash
-sudo useradd --system --create-home --shell /usr/sbin/nologin nostrbot
-sudo mkdir -p /opt/awesome-nostr-apps
-sudo chown -R "$USER":"$USER" /opt/awesome-nostr-apps
+apt update
+apt install -y curl git ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt install -y nodejs
+node -v
+npm -v
 ```
 
 リポジトリを配置し、`.env` を設定してビルドします。
 
 ```bash
+git clone <このリポジトリのURL> /opt/awesome-nostr-apps
 cd /opt/awesome-nostr-apps
 npm install
 cp .env.sample .env
 # .env に SHINOEMON_NSEC / FLOWMETER_CHAN_NSEC などを設定
 npm run build
-sudo chown -R nostrbot:nostrbot /opt/awesome-nostr-apps
 ```
 
 `/etc/systemd/system/awesome-nostr-apps.service` を作成します。
@@ -76,8 +80,6 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=nostrbot
-Group=nostrbot
 WorkingDirectory=/opt/awesome-nostr-apps
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/node /opt/awesome-nostr-apps/dist/app.js
@@ -97,9 +99,9 @@ WantedBy=multi-user.target
 登録・起動:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable awesome-nostr-apps
-sudo systemctl start awesome-nostr-apps
+systemctl daemon-reload
+systemctl enable awesome-nostr-apps
+systemctl start awesome-nostr-apps
 ```
 
 状態確認・ログ確認:
@@ -112,8 +114,8 @@ journalctl -u awesome-nostr-apps -f
 停止・無効化:
 
 ```bash
-sudo systemctl stop awesome-nostr-apps
-sudo systemctl disable awesome-nostr-apps
+systemctl stop awesome-nostr-apps
+systemctl disable awesome-nostr-apps
 ```
 
 コードや設定を更新した場合は、再ビルドしてから再起動します。
@@ -123,8 +125,7 @@ cd /opt/awesome-nostr-apps
 git pull
 npm install
 npm run build
-sudo chown -R nostrbot:nostrbot /opt/awesome-nostr-apps
-sudo systemctl restart awesome-nostr-apps
+systemctl restart awesome-nostr-apps
 ```
 
 ## 設定の考え方
