@@ -72,7 +72,7 @@ const config = {
 
   // --- 流速ちゃん（定期ジョブ＋コマンド応答） ---
   flowmeterChan: {
-    enabled: false, // 要 FLOWMETER_CHAN_NSEC
+    enabled: true, // 要 FLOWMETER_CHAN_NSEC
     command: true,
     job: true,
     cron: "*/1 * * * *",

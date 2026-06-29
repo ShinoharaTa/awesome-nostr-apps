@@ -6,8 +6,7 @@ log/
 .env.local
 .DS_Store
 
-# src/config/config.ts は Git 管理（機密は含めない）。ローカル上書きのみ無視する
-src/config/config.local.ts
+# src/config/config.ts / config.local.ts は Git 管理（機密は含めない）
 # 旧 JSON 設定（config.ts へ移行済み。残っていても無視）
 config.json
 config.local.json
