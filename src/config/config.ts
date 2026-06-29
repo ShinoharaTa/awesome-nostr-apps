@@ -82,6 +82,7 @@ const config = {
       { key: "kojira", name: "こじら川", url: "wss://r.kojira.io", target: "jp" },
       { key: "kirino", name: "きりの川", url: "wss://relay-jp.nostr.wirednet.jp", target: "jp" },
       { key: "c-stellar", name: "かすてら川", url: "wss://nrelay-jp.c-stellar.net", target: "jp" },
+      { key: "ydgw", name: "淀川", url: "https://r.ydg.works/", target: "jp" },
       { key: "kojira_g", name: "こじら大川", url: "wss://x.kojira.io", target: "all" },
       { key: "shino3_g", name: "しの川(G)", url: "wss://relay.nostx.io", target: "all" },
     ],
