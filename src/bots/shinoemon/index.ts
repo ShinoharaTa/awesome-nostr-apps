@@ -6,6 +6,7 @@ import {
   actionFromFn,
   filterFromFn,
 } from "../../core/bot-handler.js";
+import type { AmedasClient } from "../../integrations/amedas/index.js";
 import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
 import { normalizeCommandContent } from "../../shared/nostr-content.js";
 import { createCalendarBot } from "../calendar/index.js";
@@ -20,6 +21,8 @@ export interface ShinoemonSkills {
 export interface ShinoemonOptions {
   skills: ShinoemonSkills;
   switchBot: SwitchBotClient | null;
+  /** まいへや応答にアメダスの気象データを添える場合に渡す */
+  amedas?: AmedasClient | null;
   home: {
     lightDeviceNames: string[];
     allowControl: boolean;
@@ -79,6 +82,7 @@ function buildSkills(options: ShinoemonOptions): BotHandler[] {
     skills.push(
       createIoTBot({
         switchBot: options.switchBot,
+        amedas: options.amedas,
         lightControlEnabled: options.skills.lightControl,
         home: options.home,
       }),

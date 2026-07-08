@@ -34,6 +34,12 @@ export interface FileConfig {
       lightDeviceNames?: string[];
       /** 光あれ！ による実デバイス操作を許可するか。 */
       allowControl?: boolean;
+      /**
+       * まいへや応答に添えるアメダス観測所 ID（気象庁 amedastable.json 準拠）。
+       * 候補は src/integrations/amedas/index.ts の AMEDAS_STATIONS を参照。
+       * 空配列ならアメダス表示なし。
+       */
+      amedasStations?: string[];
     };
   };
   monitor?: {

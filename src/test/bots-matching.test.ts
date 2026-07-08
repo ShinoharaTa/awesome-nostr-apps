@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createIoTBot } from "../bots/shinoemon/iot/index.js";
 import { createMonitorBot } from "../bots/monitor/index.js";
 import type { BotClient, BotContext } from "../core/bot-handler.js";
+import type { AmedasClient, AmedasObservation } from "../integrations/amedas/index.js";
 import type { SwitchBotClient, SwitchBotDevice } from "../integrations/switchbot/index.js";
 import { MockNostrClient, createMockEvent } from "./helpers/mock-client.js";
 
@@ -52,6 +53,54 @@ describe("IoTBot", () => {
 
     expect(bot.filter.matches(event, ctxOf(client))).toBe(true);
     await bot.action.execute(event, ctxOf(client));
+
+    expect(client.sent[0].content).toBe("🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%");
+  });
+
+  it("appends AMeDAS weather to まいへや when configured", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "meter-1", deviceName: "まいへや温湿度計", deviceType: "Meter" },
+    ]);
+    const amedas = new MockAmedasClient([
+      {
+        stationId: "43241",
+        stationName: "さいたま",
+        time: "10:50",
+        temperature: 27.2,
+        humidity: 51,
+        precipitation1h: 0,
+        windSpeed: 0.7,
+        windDirection: "南南西",
+      },
+    ]);
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      amedas: amedas as unknown as AmedasClient,
+      home,
+    });
+
+    await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
+
+    expect(client.sent[0].content).toBe(
+      "🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%\n" +
+        "🌤 そとの様子（アメダス）：\nさいたま（10:50）：27.2℃ / 51.0% / 降水 0.0mm/h / 風 南南西 0.7m/s",
+    );
+  });
+
+  it("keeps まいへや reply unchanged when AMeDAS fetch returns nothing", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "meter-1", deviceName: "まいへや温湿度計", deviceType: "Meter" },
+    ]);
+    const amedas = new MockAmedasClient([]);
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      amedas: amedas as unknown as AmedasClient,
+      home,
+    });
+
+    await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
 
     expect(client.sent[0].content).toBe("🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%");
   });
@@ -150,6 +199,14 @@ class MockSwitchBotClient {
   async sendCommand(deviceId: string, command: string): Promise<boolean> {
     this.commands.push({ deviceId, command });
     return true;
+  }
+}
+
+class MockAmedasClient {
+  constructor(private readonly observations: AmedasObservation[]) {}
+
+  async getLatestAll(): Promise<AmedasObservation[]> {
+    return this.observations;
   }
 }
 

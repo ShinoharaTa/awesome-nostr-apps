@@ -10,6 +10,7 @@ import { createIdentity } from "./core/identity.js";
 import { JobRunner } from "./core/job-runner.js";
 import { configureLogger, logger } from "./core/logger.js";
 import { NostrClient } from "./core/nostr-client.js";
+import { AmedasClient } from "./integrations/amedas/index.js";
 import { SwitchBotClient } from "./integrations/switchbot/index.js";
 import { createFlowmeterJob } from "./jobs/flowmeter/index.js";
 import { createMetadataRefreshJob } from "./jobs/metadata-refresh/index.js";
@@ -64,12 +65,19 @@ function registerBots(manager: BotManager, config: AppConfig): void {
         })
       : null;
 
+  // アメダスは認証不要の公開データなので観測所が設定されていれば常に使う
+  const amedas =
+    config.shinoemon.home.amedasStations.length > 0
+      ? new AmedasClient(config.shinoemon.home.amedasStations)
+      : null;
+
   // 応答系 Bot は暴走対策として投稿者ごとにクールダウンを強制する
   manager.register(
     configure(
       createShinoemonBot({
         skills: config.shinoemon.skills,
         switchBot,
+        amedas,
         home: config.shinoemon.home,
         calendar: {
           apiKey: config.shinoemon.apiKey,

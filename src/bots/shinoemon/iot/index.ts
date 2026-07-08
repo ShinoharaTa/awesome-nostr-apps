@@ -5,6 +5,7 @@ import {
   actionFromFn,
   filterFromFn,
 } from "../../../core/bot-handler.js";
+import type { AmedasClient, AmedasObservation } from "../../../integrations/amedas/index.js";
 import type { SwitchBotClient, SwitchBotDevice } from "../../../integrations/switchbot/index.js";
 import { normalizeCommandContent } from "../../../shared/nostr-content.js";
 
@@ -14,6 +15,8 @@ const LIGHT_ON_COMMAND = /^光あれ[？?！!。.\s]*$/;
 
 export interface IoTOptions {
   switchBot: SwitchBotClient | null;
+  /** まいへや応答にアメダスの気象データを添える場合に渡す */
+  amedas?: AmedasClient | null;
   lightControlEnabled?: boolean;
   home: {
     lightDeviceNames: string[];
@@ -49,7 +52,7 @@ export function createIoTBot(options: IoTOptions): BotHandler {
       options.switchBot &&
       (ROOM_COMMAND.test(content) || LIGHT_STATUS_COMMAND.test(content) || LIGHT_ON_COMMAND.test(content))
     ) {
-      await handleHomeCommand(event, ctx, options.switchBot, options.home, content);
+      await handleHomeCommand(event, ctx, options.switchBot, options.amedas ?? null, options.home, content);
       return;
     }
 
@@ -72,12 +75,13 @@ async function handleHomeCommand(
   event: Event,
   ctx: BotContext,
   switchBot: SwitchBotClient,
+  amedas: AmedasClient | null,
   home: HomeOptions,
   content: string,
 ): Promise<void> {
   const devices = await switchBot.getDevices();
   if (ROOM_COMMAND.test(content)) {
-    await publishRoomStatus(event, ctx, switchBot, devices);
+    await publishRoomStatus(event, ctx, switchBot, amedas, devices);
     return;
   }
 
@@ -96,6 +100,7 @@ async function publishRoomStatus(
   event: Event,
   ctx: BotContext,
   switchBot: SwitchBotClient,
+  amedas: AmedasClient | null,
   devices: SwitchBotDevice[],
 ): Promise<void> {
   const meters = selectMeters(devices);
@@ -120,7 +125,27 @@ async function publishRoomStatus(
     return;
   }
 
-  await ctx.client.publishText(`🏠 部屋の現在の状況：\n${lines.join("\n")}`, { replyTo: event });
+  const weatherLines = amedas ? formatAmedasLines(await amedas.getLatestAll()) : [];
+  const message = ["🏠 部屋の現在の状況：", ...lines, ...weatherLines].join("\n");
+  await ctx.client.publishText(message, { replyTo: event });
+}
+
+/** アメダス観測値をまいへや応答用の行に整形する。取得できなかった場合は空配列。 */
+function formatAmedasLines(observations: AmedasObservation[]): string[] {
+  if (observations.length === 0) return [];
+  const lines = ["🌤 そとの様子（アメダス）："];
+  for (const obs of observations) {
+    const parts = [
+      `${formatMetric(obs.temperature, "℃")} / ${formatMetric(obs.humidity, "%")}`,
+      `降水 ${obs.precipitation1h === undefined ? "取得不可" : `${obs.precipitation1h.toFixed(1)}mm/h`}`,
+    ];
+    if (obs.windSpeed !== undefined) {
+      const direction = obs.windDirection && obs.windSpeed > 0 ? `${obs.windDirection} ` : "";
+      parts.push(`風 ${direction}${obs.windSpeed.toFixed(1)}m/s`);
+    }
+    lines.push(`${obs.stationName}（${obs.time}）：${parts.join(" / ")}`);
+  }
+  return lines;
 }
 
 async function publishLightStatus(
