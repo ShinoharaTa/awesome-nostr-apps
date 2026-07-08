@@ -21,7 +21,7 @@ import type { FileConfig } from "./schema.js";
 const config = {
   logLevel: "info", // debug / info / warn / error
   testMode: false, // true の間は実際に投稿せずログのみ
-  cooldownSec: 20, // 応答系 Bot の連投抑止（秒・投稿者ごと）
+  cooldownSec: 5, // 応答系 Bot の連投抑止（秒・投稿者ごと）
 
   relays: {
     // リアルタイム購読に使うリレー

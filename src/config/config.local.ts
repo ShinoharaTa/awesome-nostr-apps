@@ -28,10 +28,10 @@ const override = {
   },
   management: { enabled: false },
   flowmeterChan: {
-    enabled: false, // 要 FLOWMETER_CHAN_NSEC
+    enabled: true, // 要 FLOWMETER_CHAN_NSEC
     command: true,
     job: true,
-    cron: "*/1 * * * *",
+    cron: "0 * * * *",
     relays: [
       { key: "shino3", name: "しの川", url: "wss://relay-jp.shino3.net", target: "jp" },
       // { key: "yabumi", name: "やぶみ川", url: "wss://yabu.me", target: "jp" },
