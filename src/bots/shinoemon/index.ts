@@ -6,6 +6,7 @@ import {
   actionFromFn,
   filterFromFn,
 } from "../../core/bot-handler.js";
+import type { TempRangeChart } from "../../integrations/amedas/chart.js";
 import type { AmedasClient } from "../../integrations/amedas/index.js";
 import type { SwitchBotClient } from "../../integrations/switchbot/index.js";
 import { normalizeCommandContent } from "../../shared/nostr-content.js";
@@ -23,6 +24,8 @@ export interface ShinoemonOptions {
   switchBot: SwitchBotClient | null;
   /** まいへや応答にアメダスの気象データを添える場合に渡す */
   amedas?: AmedasClient | null;
+  /** まいへや応答に気温レンジグラフ画像を添える場合に渡す */
+  tempChart?: TempRangeChart | null;
   home: {
     lightDeviceNames: string[];
     allowControl: boolean;
@@ -83,6 +86,7 @@ function buildSkills(options: ShinoemonOptions): BotHandler[] {
       createIoTBot({
         switchBot: options.switchBot,
         amedas: options.amedas,
+        tempChart: options.tempChart,
         lightControlEnabled: options.skills.lightControl,
         home: options.home,
       }),

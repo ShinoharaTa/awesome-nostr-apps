@@ -10,7 +10,9 @@ import { createIdentity } from "./core/identity.js";
 import { JobRunner } from "./core/job-runner.js";
 import { configureLogger, logger } from "./core/logger.js";
 import { NostrClient } from "./core/nostr-client.js";
+import { TempRangeChart } from "./integrations/amedas/chart.js";
 import { AmedasClient } from "./integrations/amedas/index.js";
+import { Nip96Uploader } from "./integrations/nostr-media/index.js";
 import { SwitchBotClient } from "./integrations/switchbot/index.js";
 import { createFlowmeterJob } from "./jobs/flowmeter/index.js";
 import { createMetadataRefreshJob } from "./jobs/metadata-refresh/index.js";
@@ -71,6 +73,16 @@ function registerBots(manager: BotManager, config: AppConfig): void {
       ? new AmedasClient(config.shinoemon.home.amedasStations)
       : null;
 
+  // 気温レンジグラフはアップロードの NIP-98 署名にしのえもんの鍵を使う
+  const tempChart =
+    amedas && config.shinoemon.home.amedasChart && config.shinoemon.key
+      ? new TempRangeChart({
+          stationId: config.shinoemon.home.amedasStations[0],
+          amedas,
+          uploader: new Nip96Uploader({ signerKey: config.shinoemon.key, testMode: config.testMode }),
+        })
+      : null;
+
   // 応答系 Bot は暴走対策として投稿者ごとにクールダウンを強制する
   manager.register(
     configure(
@@ -78,6 +90,7 @@ function registerBots(manager: BotManager, config: AppConfig): void {
         skills: config.shinoemon.skills,
         switchBot,
         amedas,
+        tempChart,
         home: config.shinoemon.home,
         calendar: {
           apiKey: config.shinoemon.apiKey,

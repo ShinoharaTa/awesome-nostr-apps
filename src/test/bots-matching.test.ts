@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createIoTBot } from "../bots/shinoemon/iot/index.js";
 import { createMonitorBot } from "../bots/monitor/index.js";
 import type { BotClient, BotContext } from "../core/bot-handler.js";
+import type { TempRangeChart } from "../integrations/amedas/chart.js";
 import type { AmedasClient, AmedasObservation } from "../integrations/amedas/index.js";
 import type { SwitchBotClient, SwitchBotDevice } from "../integrations/switchbot/index.js";
 import { MockNostrClient, createMockEvent } from "./helpers/mock-client.js";
@@ -86,6 +87,55 @@ describe("IoTBot", () => {
       "🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%\n" +
         "🌤 そとの様子（アメダス）：\nさいたま（10:50）：27.2℃ / 51.0% / 降水 0.0mm/h / 風 南南西 0.7m/s",
     );
+  });
+
+  it("appends temp range chart image after weather for まいへや", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "meter-1", deviceName: "まいへや温湿度計", deviceType: "Meter" },
+    ]);
+    const amedas = new MockAmedasClient([
+      { stationId: "43241", stationName: "さいたま", time: "10:50", temperature: 27.2, humidity: 51 },
+    ]);
+    const chartUrl = "https://media.example/chart.png";
+    const tempChart = {
+      generate: async () => ({ url: chartUrl, imeta: ["imeta", `url ${chartUrl}`, "m image/png"] }),
+    };
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      amedas: amedas as unknown as AmedasClient,
+      tempChart: tempChart as unknown as TempRangeChart,
+      home,
+    });
+
+    await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
+
+    expect(client.sent[0].content).toBe(
+      "🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%\n" +
+        `🌤 そとの様子（アメダス）：\nさいたま（10:50）：27.2℃ / 51.0% / 降水 取得不可\n${chartUrl}`,
+    );
+    expect(client.sent[0].tags).toEqual([
+      ["imeta", `url ${chartUrl}`, "m image/png"],
+      ["r", chartUrl],
+    ]);
+  });
+
+  it("posts text without image when chart generation fails", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "meter-1", deviceName: "まいへや温湿度計", deviceType: "Meter" },
+    ]);
+    const tempChart = { generate: async () => null };
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      tempChart: tempChart as unknown as TempRangeChart,
+      home,
+    });
+
+    await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
+
+    expect(client.sent[0].content).toBe("🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%");
+    expect(client.sent[0].tags).toBeUndefined();
   });
 
   it("keeps まいへや reply unchanged when AMeDAS fetch returns nothing", async () => {

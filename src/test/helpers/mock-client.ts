@@ -4,6 +4,7 @@ import type { PublishOptions } from "../../core/nostr-client.js";
 export interface SentMessage {
   content: string;
   replyToId?: string;
+  tags?: string[][];
 }
 
 /**
@@ -31,7 +32,7 @@ export class MockNostrClient {
   }
 
   async publishText(content: string, options: PublishOptions = {}): Promise<string | null> {
-    this.sent.push({ content, replyToId: options.replyTo?.id });
+    this.sent.push({ content, replyToId: options.replyTo?.id, tags: options.tags });
     return "mock-event-id";
   }
 

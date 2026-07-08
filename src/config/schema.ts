@@ -40,6 +40,8 @@ export interface FileConfig {
        * 空配列ならアメダス表示なし。
        */
       amedasStations?: string[];
+      /** まいへや応答に気温レンジグラフ画像（NIP-96 アップロード）を添えるか。 */
+      amedasChart?: boolean;
     };
   };
   monitor?: {

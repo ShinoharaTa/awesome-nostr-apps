@@ -5,6 +5,7 @@ import {
   actionFromFn,
   filterFromFn,
 } from "../../../core/bot-handler.js";
+import type { TempRangeChart } from "../../../integrations/amedas/chart.js";
 import type { AmedasClient, AmedasObservation } from "../../../integrations/amedas/index.js";
 import type { SwitchBotClient, SwitchBotDevice } from "../../../integrations/switchbot/index.js";
 import { normalizeCommandContent } from "../../../shared/nostr-content.js";
@@ -17,6 +18,8 @@ export interface IoTOptions {
   switchBot: SwitchBotClient | null;
   /** まいへや応答にアメダスの気象データを添える場合に渡す */
   amedas?: AmedasClient | null;
+  /** まいへや応答に気温レンジグラフ画像を添える場合に渡す */
+  tempChart?: TempRangeChart | null;
   lightControlEnabled?: boolean;
   home: {
     lightDeviceNames: string[];
@@ -52,7 +55,15 @@ export function createIoTBot(options: IoTOptions): BotHandler {
       options.switchBot &&
       (ROOM_COMMAND.test(content) || LIGHT_STATUS_COMMAND.test(content) || LIGHT_ON_COMMAND.test(content))
     ) {
-      await handleHomeCommand(event, ctx, options.switchBot, options.amedas ?? null, options.home, content);
+      await handleHomeCommand(
+        event,
+        ctx,
+        options.switchBot,
+        options.amedas ?? null,
+        options.tempChart ?? null,
+        options.home,
+        content,
+      );
       return;
     }
 
@@ -76,12 +87,13 @@ async function handleHomeCommand(
   ctx: BotContext,
   switchBot: SwitchBotClient,
   amedas: AmedasClient | null,
+  tempChart: TempRangeChart | null,
   home: HomeOptions,
   content: string,
 ): Promise<void> {
   const devices = await switchBot.getDevices();
   if (ROOM_COMMAND.test(content)) {
-    await publishRoomStatus(event, ctx, switchBot, amedas, devices);
+    await publishRoomStatus(event, ctx, switchBot, amedas, tempChart, devices);
     return;
   }
 
@@ -101,6 +113,7 @@ async function publishRoomStatus(
   ctx: BotContext,
   switchBot: SwitchBotClient,
   amedas: AmedasClient | null,
+  tempChart: TempRangeChart | null,
   devices: SwitchBotDevice[],
 ): Promise<void> {
   const meters = selectMeters(devices);
@@ -126,8 +139,13 @@ async function publishRoomStatus(
   }
 
   const weatherLines = amedas ? formatAmedasLines(await amedas.getLatestAll()) : [];
-  const message = ["🏠 部屋の現在の状況：", ...lines, ...weatherLines].join("\n");
-  await ctx.client.publishText(message, { replyTo: event });
+  const chart = tempChart ? await tempChart.generate() : null;
+  const parts = ["🏠 部屋の現在の状況：", ...lines, ...weatherLines];
+  if (chart) parts.push(chart.url);
+  await ctx.client.publishText(parts.join("\n"), {
+    replyTo: event,
+    tags: chart ? [chart.imeta, ["r", chart.url]] : undefined,
+  });
 }
 
 /** アメダス観測値をまいへや応答用の行に整形する。取得できなかった場合は空配列。 */

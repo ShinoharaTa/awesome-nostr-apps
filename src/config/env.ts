@@ -72,6 +72,7 @@ export interface AppConfig {
       lightDeviceNames: string[];
       allowControl: boolean;
       amedasStations: string[];
+      amedasChart: boolean;
     };
     key?: string;
     /** .env 由来 */
@@ -165,6 +166,7 @@ export async function loadConfig(): Promise<AppConfig> {
         lightDeviceNames: file.shinoemon?.home?.lightDeviceNames ?? [],
         allowControl: file.shinoemon?.home?.allowControl ?? false,
         amedasStations: file.shinoemon?.home?.amedasStations ?? [],
+        amedasChart: file.shinoemon?.home?.amedasChart ?? false,
       },
       key: optKey("SHINOEMON_NSEC"),
       apiKey: calendarApiKey,

@@ -25,6 +25,14 @@ export const AMEDAS_STATIONS: Record<string, string> = {
   "43056": "熊谷",
 };
 
+/**
+ * 「過去の気象データ検索」(etrn) 用の地点パラメータ。過去年の日別値の取得に使う。
+ * bosai 側の観測所 ID とは体系が異なるためここで対応付ける（さいたま市内の観測所のみ）。
+ */
+export const AMEDAS_ETRN: Record<string, { prec: number; block: string }> = {
+  "43241": { prec: 43, block: "0363" }, // さいたま（桜区）
+};
+
 /** windDirection の 16 方位（1=北北東 … 16=北、0=静穏）。 */
 const WIND_DIRECTIONS = [
   "静穏",
