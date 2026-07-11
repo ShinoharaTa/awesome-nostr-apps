@@ -152,6 +152,7 @@ systemctl restart awesome-nostr-apps
 | `shinoemon.home.lightDeviceNames` | 「光ある？」「光あれ！」で使う SwitchBot ライト名。空ならライト系デバイスを自動選択 |
 | 温湿度計 | 設定不要。SwitchBot の温湿度系デバイスを自動選択し、`deviceName` の名前順で表示 |
 | `shinoemon.home.allowControl` | `true` の時だけ「光あれ！」で実際にライトを点灯する |
+| `shinoemon.acl.smartHome` | スマートホーム操作（まいへや / 光ある？ / 光あれ）を許可する npub / hex。**空なら全員拒否**。ここに列挙した公開鍵からの投稿だけが反応する |
 | `monitor.keywords` / `npubs` / `mentionNpubs` | 監視するキーワード / 投稿者 / メンション宛先 |
 | `<Bot/機能>.cron` | 定期ジョブの cron スケジュール |
 | `<Bot/機能>.relays` | その機能が使うリレー（下記「リレー指定」参照） |

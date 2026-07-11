@@ -117,6 +117,9 @@ function createTestShinoemonBot(): BotHandler {
       calendar: false,
     },
     switchBot: null,
+    acl: {
+      smartHome: [],
+    },
     home: {
       lightDeviceNames: [],
       allowControl: false,

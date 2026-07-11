@@ -5,14 +5,23 @@ import {
   actionFromFn,
   filterFromFn,
 } from "../../../core/bot-handler.js";
+import { logger } from "../../../core/logger.js";
 import type { TempRangeChart } from "../../../integrations/amedas/chart.js";
 import type { AmedasClient, AmedasObservation } from "../../../integrations/amedas/index.js";
 import type { SwitchBotClient, SwitchBotDevice } from "../../../integrations/switchbot/index.js";
 import { normalizeCommandContent } from "../../../shared/nostr-content.js";
+import { currUnixtime } from "../../../shared/time.js";
 
 const ROOM_COMMAND = /^まいへや[？?！!。.\s]*$/;
 const LIGHT_STATUS_COMMAND = /^光ある？[？?！!。.\s]*$/;
 const LIGHT_ON_COMMAND = /^光あれ[？?！!。.\s]*$/;
+
+/**
+ * 操作コマンド（光あれ）の許容鮮度（秒）。これより古い投稿は実行しない。
+ * リアルタイム購読 (EventBus は since=now) が基本のため、リプレイや
+ * 過去投稿の掘り起こしによる意図しない点灯を防ぐ保険。
+ */
+const CONTROL_MAX_AGE_SEC = 180;
 
 export interface IoTOptions {
   switchBot: SwitchBotClient | null;
@@ -21,6 +30,11 @@ export interface IoTOptions {
   /** まいへや応答に気温レンジグラフ画像を添える場合に渡す */
   tempChart?: TempRangeChart | null;
   lightControlEnabled?: boolean;
+  /**
+   * スマートホーム操作を許可する pubkey(hex)。空なら全員拒否。
+   * まいへや / 光ある？ / 光あれ の全コマンドに適用する。
+   */
+  allowedPubkeys?: string[];
   home: {
     lightDeviceNames: string[];
     allowControl: boolean;
@@ -33,40 +47,56 @@ export interface IoTOptions {
  */
 export function createIoTBot(options: IoTOptions): BotHandler {
   const lightControlEnabled = options.lightControlEnabled ?? true;
-  const filter = filterFromFn((event: Event, ctx: BotContext) => {
+  // 許可鍵は Set で高速照合。空なら全員拒否（default deny）。
+  const allowed = new Set(options.allowedPubkeys ?? []);
+
+  /**
+   * スマートホームコマンドとして処理してよいか判定する。
+   * 署名検証は SimplePool が購読時に済ませている（無効署名は Bot に届かない）ため、
+   * ここでは ACL（許可鍵）と操作イベントの鮮度だけを見る。
+   */
+  const shouldHandle = (event: Event, ctx: BotContext): boolean => {
     if (event.pubkey === ctx.client.getPublicKey()) return false;
+    if (!lightControlEnabled || !options.switchBot) return false;
+
     const content = normalizeCommandContent(event.content);
-    if (
-      lightControlEnabled &&
-      options.switchBot &&
-      (ROOM_COMMAND.test(content) ||
-        LIGHT_STATUS_COMMAND.test(content) ||
-        LIGHT_ON_COMMAND.test(content))
-    ) {
-      return true;
+    const isRoom = ROOM_COMMAND.test(content);
+    const isStatus = LIGHT_STATUS_COMMAND.test(content);
+    const isOn = LIGHT_ON_COMMAND.test(content);
+    if (!isRoom && !isStatus && !isOn) return false;
+
+    if (!allowed.has(event.pubkey)) {
+      logger.warn("smart home command denied: pubkey not in ACL", {
+        pubkey: `${event.pubkey.slice(0, 12)}...`,
+      });
+      return false;
     }
-    return false;
-  });
+
+    // 操作系（点灯）だけは古いイベントを弾く。参照系は再取得しても無害。
+    if (isOn && event.created_at < currUnixtime() - CONTROL_MAX_AGE_SEC) {
+      logger.warn("smart home operation denied: stale event", {
+        pubkey: `${event.pubkey.slice(0, 12)}...`,
+        createdAt: event.created_at,
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const filter = filterFromFn((event: Event, ctx: BotContext) => shouldHandle(event, ctx));
 
   const action = actionFromFn(async (event: Event, ctx: BotContext) => {
-    const content = normalizeCommandContent(event.content);
-    if (
-      lightControlEnabled &&
-      options.switchBot &&
-      (ROOM_COMMAND.test(content) || LIGHT_STATUS_COMMAND.test(content) || LIGHT_ON_COMMAND.test(content))
-    ) {
-      await handleHomeCommand(
-        event,
-        ctx,
-        options.switchBot,
-        options.amedas ?? null,
-        options.tempChart ?? null,
-        options.home,
-        content,
-      );
-      return;
-    }
-
+    if (!options.switchBot || !shouldHandle(event, ctx)) return;
+    await handleHomeCommand(
+      event,
+      ctx,
+      options.switchBot,
+      options.amedas ?? null,
+      options.tempChart ?? null,
+      options.home,
+      normalizeCommandContent(event.content),
+    );
   });
 
   return {

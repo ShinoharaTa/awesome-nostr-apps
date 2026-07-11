@@ -51,6 +51,11 @@ const config = {
       lightControl: true, // まいへや/光ある？/光あれ！（要 SWITCH_BOT_TOKEN/SECRET）
       calendar: false, // 「予定 ...」から Google カレンダー URL を生成
     },
+    acl: {
+      // スマートホーム操作（まいへや/光ある？/光あれ）を許可する npub または hex。
+      // 空配列なら全員拒否。信頼できる自分の npub を列挙する。
+      smartHome: ["npub1l60d6h2uvdwa9yq0r7r2suhgrnsadcst6nsx2j03xwhxhu2cjyascejxe5"],
+    },
     home: {
       // 温湿度計は SwitchBot のデバイスタイプから自動選択し、deviceName の名前順で表示する。
       lightDeviceNames: [],
