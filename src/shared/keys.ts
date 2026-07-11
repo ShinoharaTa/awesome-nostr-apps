@@ -24,3 +24,22 @@ export function toSecretKeyBytes(key: string): Uint8Array {
 export function toHexKey(key: string): string {
   return Buffer.from(toSecretKeyBytes(key)).toString("hex");
 }
+
+/**
+ * npub1... または hex 公開鍵を 64 文字 hex 公開鍵に正規化する。
+ * ACL など「pubkey で許可判定したい」用途向け。不正値は例外。
+ */
+export function toPubkeyHex(key: string): string {
+  const trimmed = key.trim();
+  if (trimmed.startsWith("npub1")) {
+    const decoded = nip19.decode(trimmed);
+    if (decoded.type !== "npub") {
+      throw new Error("Invalid npub key");
+    }
+    return decoded.data;
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    throw new Error("Pubkey must be npub1... or 64-char hex");
+  }
+  return trimmed.toLowerCase();
+}

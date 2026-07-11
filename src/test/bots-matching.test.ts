@@ -16,10 +16,12 @@ describe("IoTBot", () => {
     lightDeviceNames: ["まいへやライト"],
     allowControl: true,
   };
+  // createMockEvent の既定 pubkey。ACL 許可鍵として使う。
+  const ALLOWED = "a".repeat(64);
 
   it("does not react to salmon keywords", () => {
     const client = new MockNostrClient();
-    const bot = createIoTBot({ switchBot: null, home });
+    const bot = createIoTBot({ switchBot: null, home, allowedPubkeys: [ALLOWED] });
     const event = createMockEvent({ content: "サーモン食べたい" });
 
     expect(bot.filter.matches(event, ctxOf(client))).toBe(false);
@@ -27,7 +29,7 @@ describe("IoTBot", () => {
 
   it("does not react to its own posts", () => {
     const client = new MockNostrClient();
-    const bot = createIoTBot({ switchBot: null, home });
+    const bot = createIoTBot({ switchBot: null, home, allowedPubkeys: [ALLOWED] });
     const event = createMockEvent({ content: "サーモン", pubkey: client.getPublicKey() });
 
     expect(bot.filter.matches(event, ctxOf(client))).toBe(false);
@@ -35,7 +37,7 @@ describe("IoTBot", () => {
 
   it("ignores light commands when SwitchBot is not configured", () => {
     const client = new MockNostrClient();
-    const bot = createIoTBot({ switchBot: null, home });
+    const bot = createIoTBot({ switchBot: null, home, allowedPubkeys: [ALLOWED] });
     const event = createMockEvent({
       content: "光あれ",
       tags: [["p", client.getPublicKey()]],
@@ -44,12 +46,72 @@ describe("IoTBot", () => {
     expect(bot.filter.matches(event, ctxOf(client))).toBe(false);
   });
 
+  it("denies smart home commands from pubkeys not in the ACL", async () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
+    ]);
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: ["b".repeat(64)],
+    });
+    const event = createMockEvent({ content: "光あれ" });
+
+    expect(bot.filter.matches(event, ctxOf(client))).toBe(false);
+    await bot.action.execute(event, ctxOf(client));
+
+    expect(switchBot.commands).toEqual([]);
+    expect(client.sent).toHaveLength(0);
+  });
+
+  it("denies all smart home commands when the ACL is empty", () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "meter-1", deviceName: "まいへや温湿度計", deviceType: "Meter" },
+    ]);
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [],
+    });
+
+    expect(bot.filter.matches(createMockEvent({ content: "まいへや" }), ctxOf(client))).toBe(false);
+  });
+
+  it("rejects a stale 光あれ operation but still allows fresh reads", () => {
+    const client = new MockNostrClient();
+    const switchBot = new MockSwitchBotClient([
+      { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
+    ]);
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
+    const stale = createMockEvent({
+      content: "光あれ",
+      created_at: Math.floor(Date.now() / 1000) - 3600,
+    });
+    const freshRead = createMockEvent({
+      content: "光ある？",
+      created_at: Math.floor(Date.now() / 1000) - 3600,
+    });
+
+    expect(bot.filter.matches(stale, ctxOf(client))).toBe(false);
+    expect(bot.filter.matches(freshRead, ctxOf(client))).toBe(true);
+  });
+
   it("replies with room temperature and humidity for まいへや", async () => {
     const client = new MockNostrClient();
     const switchBot = new MockSwitchBotClient([
       { deviceId: "meter-1", deviceName: "まいへや温湿度計", deviceType: "Meter" },
     ]);
-    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
     const event = createMockEvent({ content: "まいへや" });
 
     expect(bot.filter.matches(event, ctxOf(client))).toBe(true);
@@ -79,6 +141,7 @@ describe("IoTBot", () => {
       switchBot: switchBot as unknown as SwitchBotClient,
       amedas: amedas as unknown as AmedasClient,
       home,
+      allowedPubkeys: [ALLOWED],
     });
 
     await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
@@ -106,13 +169,13 @@ describe("IoTBot", () => {
       amedas: amedas as unknown as AmedasClient,
       tempChart: tempChart as unknown as TempRangeChart,
       home,
+      allowedPubkeys: [ALLOWED],
     });
 
     await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
 
     expect(client.sent[0].content).toBe(
-      "🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%\n" +
-        `🌤 そとの様子（アメダス）：\nさいたま（10:50）：27.2℃ / 51.0% / 降水 取得不可\n${chartUrl}`,
+      `🏠 部屋の現在の状況：\nまいへや温湿度計：23.4℃ / 56.0%\n🌤 そとの様子（アメダス）：\nさいたま（10:50）：27.2℃ / 51.0% / 降水 取得不可\n${chartUrl}`,
     );
     expect(client.sent[0].tags).toEqual([
       ["imeta", `url ${chartUrl}`, "m image/png"],
@@ -130,6 +193,7 @@ describe("IoTBot", () => {
       switchBot: switchBot as unknown as SwitchBotClient,
       tempChart: tempChart as unknown as TempRangeChart,
       home,
+      allowedPubkeys: [ALLOWED],
     });
 
     await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
@@ -148,6 +212,7 @@ describe("IoTBot", () => {
       switchBot: switchBot as unknown as SwitchBotClient,
       amedas: amedas as unknown as AmedasClient,
       home,
+      allowedPubkeys: [ALLOWED],
     });
 
     await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
@@ -162,7 +227,11 @@ describe("IoTBot", () => {
       { deviceId: "meter-rack-top", deviceName: "サーバーラック上部", deviceType: "Meter" },
       { deviceId: "meter-dead", deviceName: "取得不可センサー", deviceType: "Meter" },
     ]);
-    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
 
     await bot.action.execute(createMockEvent({ content: "まいへや" }), ctxOf(client));
 
@@ -176,7 +245,11 @@ describe("IoTBot", () => {
     const switchBot = new MockSwitchBotClient([
       { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
     ]);
-    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
     const event = createMockEvent({ content: "光ある？" });
 
     await bot.action.execute(event, ctxOf(client));
@@ -189,7 +262,11 @@ describe("IoTBot", () => {
     const switchBot = new MockSwitchBotClient([
       { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
     ]);
-    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
     const event = createMockEvent({ content: "光あれ！" });
 
     await bot.action.execute(event, ctxOf(client));
@@ -203,7 +280,11 @@ describe("IoTBot", () => {
     const switchBot = new MockSwitchBotClient([
       { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
     ]);
-    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
 
     await bot.action.execute(createMockEvent({ content: "光あれ" }), ctxOf(client));
 
@@ -215,7 +296,11 @@ describe("IoTBot", () => {
     const switchBot = new MockSwitchBotClient([
       { deviceId: "light-1", deviceName: "まいへやライト", deviceType: "Ceiling Light" },
     ]);
-    const bot = createIoTBot({ switchBot: switchBot as unknown as SwitchBotClient, home });
+    const bot = createIoTBot({
+      switchBot: switchBot as unknown as SwitchBotClient,
+      home,
+      allowedPubkeys: [ALLOWED],
+    });
     const event = createMockEvent({ content: "nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq 光ある？" });
 
     expect(bot.filter.matches(event, ctxOf(client))).toBe(true);

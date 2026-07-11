@@ -26,6 +26,13 @@ export interface ShinoemonOptions {
   amedas?: AmedasClient | null;
   /** まいへや応答に気温レンジグラフ画像を添える場合に渡す */
   tempChart?: TempRangeChart | null;
+  /**
+   * スマートホーム操作を許可する pubkey(hex)。空なら全員拒否。
+   * lightControl skill のみに適用し、呼びかけ応答などには影響しない。
+   */
+  acl: {
+    smartHome: string[];
+  };
   home: {
     lightDeviceNames: string[];
     allowControl: boolean;
@@ -88,6 +95,7 @@ function buildSkills(options: ShinoemonOptions): BotHandler[] {
         amedas: options.amedas,
         tempChart: options.tempChart,
         lightControlEnabled: options.skills.lightControl,
+        allowedPubkeys: options.acl.smartHome,
         home: options.home,
       }),
     );

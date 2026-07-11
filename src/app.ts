@@ -91,6 +91,7 @@ function registerBots(manager: BotManager, config: AppConfig): void {
         switchBot,
         amedas,
         tempChart,
+        acl: config.shinoemon.acl,
         home: config.shinoemon.home,
         calendar: {
           apiKey: config.shinoemon.apiKey,

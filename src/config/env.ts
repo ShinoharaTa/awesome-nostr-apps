@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import { logger } from "../core/logger.js";
-import { toHexKey } from "../shared/keys.js";
+import { toHexKey, toPubkeyHex } from "../shared/keys.js";
 import type { RelayInfo } from "./relays.js";
 import { type FileConfig, loadFileConfig } from "./schema.js";
 
@@ -38,6 +38,19 @@ function optKey(name: string): string | undefined {
 }
 
 /**
+ * npub / hex 公開鍵のリストを 64 文字 hex に正規化する。不正値は起動時に例外。
+ */
+function pubkeyList(values: string[], source: string): string[] {
+  return values.map((value) => {
+    try {
+      return toPubkeyHex(value);
+    } catch (error) {
+      throw new Error(`Invalid pubkey in ${source} ("${value}"): ${String(error)}`);
+    }
+  });
+}
+
+/**
  * アプリ全体の設定。秘密情報は .env、非機密設定は config.ts から読み、
  * ここで 1 つの構造体に統合する。各 Bot / Job はここだけを参照する。
  */
@@ -67,6 +80,10 @@ export interface AppConfig {
       callResponse: boolean;
       lightControl: boolean;
       calendar: boolean;
+    };
+    /** スマートホーム操作を許可する pubkey(hex)。空なら全員拒否。 */
+    acl: {
+      smartHome: string[];
     };
     home: {
       lightDeviceNames: string[];
@@ -162,6 +179,9 @@ export async function loadConfig(): Promise<AppConfig> {
         lightControl: file.shinoemon?.skills?.lightControl ?? false,
         calendar: file.shinoemon?.skills?.calendar ?? false,
       },
+      acl: {
+        smartHome: pubkeyList(file.shinoemon?.acl?.smartHome ?? [], "shinoemon.acl.smartHome"),
+      },
       home: {
         lightDeviceNames: file.shinoemon?.home?.lightDeviceNames ?? [],
         allowControl: file.shinoemon?.home?.allowControl ?? false,
@@ -243,6 +263,15 @@ function validate(config: AppConfig, _file: FileConfig): void {
   ) {
     logger.warn("shinoemon lightControl skill disabled: SWITCH_BOT_TOKEN/SECRET is missing in .env");
     config.shinoemon.skills.lightControl = false;
+  }
+  if (
+    config.shinoemon.enabled &&
+    config.shinoemon.skills.lightControl &&
+    config.shinoemon.acl.smartHome.length === 0
+  ) {
+    logger.warn(
+      "shinoemon lightControl is enabled but shinoemon.acl.smartHome is empty: all smart home commands will be denied. Add allowed npubs.",
+    );
   }
 
   // Nostr へ投稿する公開 Bot は自分の鍵が必須。内部 skill はその Bot の鍵を使う。

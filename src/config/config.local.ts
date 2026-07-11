@@ -21,6 +21,10 @@ const override = {
       lightControl: true,
       calendar: false,
     },
+    acl: {
+      // スマートホーム操作を許可する npub / hex。空なら全員拒否。
+      smartHome: ["npub1l60d6h2uvdwa9yq0r7r2suhgrnsadcst6nsx2j03xwhxhu2cjyascejxe5"],
+    },
     home: {
       lightDeviceNames: [],
       allowControl: false,

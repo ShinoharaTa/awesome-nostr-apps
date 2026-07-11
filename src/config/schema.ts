@@ -29,6 +29,14 @@ export interface FileConfig {
       lightControl?: boolean;
       calendar?: boolean;
     };
+    /**
+     * スマートホーム操作の許可リスト（アクセス制御）。
+     * ここに列挙した npub / hex 公開鍵だけが「まいへや」「光ある？」「光あれ」を
+     * 実行できる。空配列・未設定なら全員拒否（誰も操作できない）。
+     */
+    acl?: {
+      smartHome?: string[];
+    };
     home?: {
       /** 点灯状態確認・点灯操作に使うライト名。未指定ならライト系デバイスを自動選択。 */
       lightDeviceNames?: string[];
